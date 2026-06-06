@@ -1,0 +1,118 @@
+spring:
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
+  application:
+    name: ai-interview-platform
+
+  # PostgreSQL Configuration
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:ai_platform}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASS:123456}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+
+  # JPA / Hibernate
+  jpa:
+    generate-ddl: true
+    hibernate:
+      ddl-auto: update # Automatically create/update tables in development
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # Redis Configuration
+  data:
+    redis:
+      repositories:
+        enabled: false
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASS:}
+      timeout: 2000
+
+  # Kafka Configuration
+  kafka:
+    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: ai-platform-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring:
+          json:
+            trusted:
+              packages: "*"
+
+# Gemini AI Configuration
+gemini:
+  api-key: ${GEMINI_API_KEY:AIzaSyCX6BjXE_X55NDP6INCziNl-Ancd3kEffg}
+  model: gemini-2.0-flash
+  fallback-to-mock: true
+
+# Custom Application Properties
+app:
+  jwt:
+    secret: ${JWT_SECRET:abcdefghijklmnopqrstuvwxyz1234567890}
+    expiration: 86400000 # 24 hours in ms
+
+logging:
+  config: classpath:logback-spring.xml
+
+# Monitoring & Management
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+server:
+  port: ${PORT:8081}
+
+---
+# ══════════════════════════════════════════
+# Production Profile
+# ══════════════════════════════════════════
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+  # Redis with TLS (required for Upstash)
+  data:
+    redis:
+      ssl:
+        enabled: true
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASS}
+
+  # Tighter connection pool for free tier
+  datasource:
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+
+# Read CORS origins from env
+cors:
+  allowed-origins: ${ALLOWED_ORIGINS:*}
