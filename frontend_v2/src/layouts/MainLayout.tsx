@@ -3,7 +3,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { 
   Moon, Sun, LayoutDashboard, Code2, History, BrainCircuit, 
   Mic, FileText, GitBranch, Map, Settings, Search, Bell, Menu, 
-  X, LogOut
+  X, LogOut, Link2
 } from 'lucide-react';
 import { useSelector, useDispatch } from 'react-redux';
 import type { RootState } from '../store/store';
@@ -18,6 +18,7 @@ const NAV_ITEMS = [
   { name: 'Mock Interview', path: '/interview', icon: Mic },
   { name: 'Resume Analyzer', path: '/resume', icon: FileText },
   { name: 'GitHub Analyzer', path: '/github', icon: GitBranch },
+  { name: 'Platforms', path: '/platforms', icon: Link2 },
   { name: 'Roadmap', path: '/roadmap', icon: Map },
   { name: 'Settings', path: '/settings', icon: Settings },
 ];

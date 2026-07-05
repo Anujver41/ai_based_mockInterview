@@ -18,6 +18,7 @@ import InterviewChatPage from '../pages/interview/InterviewChatPage';
 import ResumePage from '../pages/resume/ResumePage';
 import GithubAnalyzerPage from '../pages/github/GithubAnalyzerPage';
 import DashboardPage from '../pages/dashboard/DashboardPage';
+import ConnectedPlatformsPage from '../pages/platforms/ConnectedPlatformsPage';
 
 // Temporary placeholder components for routes
 const Home = () => (
@@ -146,6 +147,16 @@ export const AppRoutes = () => {
           element={
             <ProtectedRoute>
               <GithubAnalyzerPage />
+            </ProtectedRoute>
+          } 
+        />
+
+        {/* Connected Platforms */}
+        <Route 
+          path="platforms" 
+          element={
+            <ProtectedRoute>
+              <ConnectedPlatformsPage />
             </ProtectedRoute>
           } 
         />
