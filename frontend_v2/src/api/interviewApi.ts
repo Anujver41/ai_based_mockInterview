@@ -1,6 +1,6 @@
-import axios from 'axios';
+import apiClient from '@/api/axios';
 
-const API_URL = 'http://localhost:8081/api/v1/interviews';
+const INTERVIEWS = '/interviews';
 
 export interface StartInterviewRequest {
   topic: string;
@@ -26,42 +26,27 @@ export interface InterviewMessageResponse {
   timestamp: string;
 }
 
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('token');
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
-
 export const startInterview = async (request: StartInterviewRequest): Promise<InterviewSessionResponse> => {
-  const response = await axios.post<InterviewSessionResponse>(`${API_URL}/start`, request, {
-    headers: getAuthHeaders(),
-  });
+  const response = await apiClient.post<InterviewSessionResponse>(`${INTERVIEWS}/start`, request);
   return response.data;
 };
 
 export const sendChatMessage = async (sessionId: string, content: string): Promise<InterviewMessageResponse> => {
-  const response = await axios.post<InterviewMessageResponse>(`${API_URL}/${sessionId}/chat`, { content }, {
-    headers: getAuthHeaders(),
-  });
+  const response = await apiClient.post<InterviewMessageResponse>(`${INTERVIEWS}/${sessionId}/chat`, { content });
   return response.data;
 };
 
 export const getUserSessions = async (): Promise<InterviewSessionResponse[]> => {
-  const response = await axios.get<InterviewSessionResponse[]>(API_URL, {
-    headers: getAuthHeaders(),
-  });
+  const response = await apiClient.get<InterviewSessionResponse[]>(INTERVIEWS);
   return response.data;
 };
 
 export const getSessionMessages = async (sessionId: string): Promise<InterviewMessageResponse[]> => {
-  const response = await axios.get<InterviewMessageResponse[]>(`${API_URL}/${sessionId}/messages`, {
-    headers: getAuthHeaders(),
-  });
+  const response = await apiClient.get<InterviewMessageResponse[]>(`${INTERVIEWS}/${sessionId}/messages`);
   return response.data;
 };
 
 export const endInterview = async (sessionId: string): Promise<InterviewSessionResponse> => {
-  const response = await axios.put<InterviewSessionResponse>(`${API_URL}/${sessionId}/end`, null, {
-    headers: getAuthHeaders(),
-  });
+  const response = await apiClient.put<InterviewSessionResponse>(`${INTERVIEWS}/${sessionId}/end`, null);
   return response.data;
 };

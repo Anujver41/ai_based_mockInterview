@@ -1,6 +1,6 @@
-import axios from 'axios';
+import apiClient from '@/api/axios';
 
-const API_URL = 'http://localhost:8081/api/v1/ai/review';
+const AI_REVIEW = '/ai/review';
 
 export interface CodeReviewRequest {
   code: string;
@@ -16,14 +16,7 @@ export interface CodeReviewResponse {
   overallScore: string;
 }
 
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('token');
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
-
 export const reviewCode = async (request: CodeReviewRequest): Promise<CodeReviewResponse> => {
-  const response = await axios.post<CodeReviewResponse>(API_URL, request, {
-    headers: getAuthHeaders(),
-  });
+  const response = await apiClient.post<CodeReviewResponse>(AI_REVIEW, request);
   return response.data;
 };

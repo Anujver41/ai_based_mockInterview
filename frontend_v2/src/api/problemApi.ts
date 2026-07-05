@@ -1,6 +1,6 @@
-import axios from 'axios';
+import apiClient from '@/api/axios';
 
-const API_URL = 'http://localhost:8081/api/v1/problems';
+const PROBLEMS = '/problems';
 
 export interface TestCase {
   input: string;
@@ -42,25 +42,18 @@ export interface Page<T> {
 }
 
 export const getProblems = async (page: number = 0, size: number = 10, sortBy: string = 'createdAt', direction: string = 'DESC'): Promise<Page<Problem>> => {
-  const token = localStorage.getItem('token');
-  const headers = token ? { Authorization: `Bearer ${token}` } : {};
-  const response = await axios.get<Page<Problem>>(API_URL, {
+  const response = await apiClient.get<Page<Problem>>(PROBLEMS, {
     params: { page, size, sortBy, direction },
-    headers
   });
   return response.data;
 };
 
 export const getProblemById = async (id: string): Promise<Problem> => {
-  const token = localStorage.getItem('token');
-  const headers = token ? { Authorization: `Bearer ${token}` } : {};
-  const response = await axios.get<Problem>(`${API_URL}/${id}`, { headers });
+  const response = await apiClient.get<Problem>(`${PROBLEMS}/${id}`);
   return response.data;
 };
 
 export const createProblem = async (problem: ProblemCreateRequest): Promise<Problem> => {
-  const token = localStorage.getItem('token');
-  const headers = token ? { Authorization: `Bearer ${token}` } : {};
-  const response = await axios.post<Problem>(API_URL, problem, { headers });
+  const response = await apiClient.post<Problem>(PROBLEMS, problem);
   return response.data;
 };

@@ -1,6 +1,6 @@
-import axios from 'axios';
+import apiClient from '@/api/axios';
 
-const API_URL = 'http://localhost:8081/api/v1/submissions';
+const SUBMISSIONS = '/submissions';
 
 export type SubmissionStatus = 'PENDING' | 'RUNNING' | 'PASSED' | 'FAILED';
 
@@ -24,28 +24,17 @@ export interface SubmissionResponse {
   createdAt: string;
 }
 
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('token');
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
-
 export const submitCode = async (request: SubmissionRequest): Promise<SubmissionResponse> => {
-  const response = await axios.post<SubmissionResponse>(API_URL, request, {
-    headers: getAuthHeaders(),
-  });
+  const response = await apiClient.post<SubmissionResponse>(SUBMISSIONS, request);
   return response.data;
 };
 
 export const getSubmissionStatus = async (id: number): Promise<SubmissionResponse> => {
-  const response = await axios.get<SubmissionResponse>(`${API_URL}/${id}`, {
-    headers: getAuthHeaders(),
-  });
+  const response = await apiClient.get<SubmissionResponse>(`${SUBMISSIONS}/${id}`);
   return response.data;
 };
 
 export const getUserSubmissions = async (userId: string): Promise<SubmissionResponse[]> => {
-  const response = await axios.get<SubmissionResponse[]>(`${API_URL}/user/${userId}`, {
-    headers: getAuthHeaders(),
-  });
+  const response = await apiClient.get<SubmissionResponse[]>(`${SUBMISSIONS}/user/${userId}`);
   return response.data;
 };
