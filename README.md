@@ -1,6 +1,8 @@
 # 🤖 AI Interview & Coding Platform
 
 > A full-stack, AI-powered platform for technical interview preparation — featuring mock interviews, AI code review, resume analysis, GitHub profile insights, and a LeetCode-style problem bank. Built with **Spring Boot 3** + **React 19** + **Google Gemini AI**.
+> ---
+## live :- https://ai-based-mock-interview-beta.vercel.app/
 
 ---
 
