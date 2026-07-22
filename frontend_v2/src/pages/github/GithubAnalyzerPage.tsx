@@ -35,8 +35,8 @@ const generateCommitData = (factor: number) => [
 ];
 
 export const GithubAnalyzerPage = () => {
-  const [usernameInput, setUsernameInput] = useState('');
-  const [activeUsername, setActiveUsername] = useState<string | null>(null);
+  const [usernameInput, setUsernameInput] = useState(() => localStorage.getItem('githubUsername') || 'Anujver41');
+  const [activeUsername, setActiveUsername] = useState<string | null>(() => localStorage.getItem('githubUsername') || 'Anujver41');
 
   // Fetch standard Github profile details
   const { 
@@ -125,6 +125,14 @@ export const GithubAnalyzerPage = () => {
   };
 
   const scores = getDeveloperScores();
+
+  // Persist score & active username to localStorage for Dashboard integration
+  React.useEffect(() => {
+    if (scores.total > 0 && activeUsername) {
+      localStorage.setItem('githubScore', scores.total.toString());
+      localStorage.setItem('githubUsername', activeUsername);
+    }
+  }, [scores.total, activeUsername]);
   
   // Format language data for Recharts Pie Chart
   const getLanguageChartData = () => {

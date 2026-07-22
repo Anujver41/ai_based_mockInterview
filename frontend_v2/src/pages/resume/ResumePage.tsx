@@ -36,6 +36,46 @@ export const ResumePage = () => {
     'Compiling suggestions and missing skills...'
   ];
 
+  // Load saved analysis from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedScore = localStorage.getItem('resumeScore');
+      const savedAnalysis = localStorage.getItem('resumeAnalysis');
+      if (savedAnalysis) {
+        setAnalysisResult(JSON.parse(savedAnalysis));
+      } else if (savedScore) {
+        // Fallback default structure if only score was saved
+        setAnalysisResult({
+          score: parseInt(savedScore, 10),
+          metrics: { keywords: 63, formatting: 78, structure: 70, experienceMatch: 56 },
+          missingKeywords: [
+            { name: 'Kubernetes', priority: 'high' },
+            { name: 'System Design', priority: 'high' },
+            { name: 'CI/CD Pipelines', priority: 'high' },
+            { name: 'Redis Caching', priority: 'medium' },
+            { name: 'Microservices', priority: 'medium' },
+            { name: 'Unit Testing', priority: 'medium' },
+            { name: 'AWS Cloud', priority: 'medium' },
+            { name: 'Kafka', priority: 'low' },
+            { name: 'Agile/Scrum', priority: 'low' },
+          ],
+          suggestions: [
+            {
+              id: 1,
+              category: 'Experience & Impact',
+              title: 'Quantify your achievements with metrics',
+              description: 'Rewrite bullet points to follow the Google X-Y-Z formula (e.g. Accomplished [X] as measured by [Y], by doing [Z]). Add concrete percentages or cost savings.',
+              impact: '+12 ATS Points',
+              type: 'high'
+            }
+          ]
+        });
+      }
+    } catch (e) {
+      console.error('Failed to load stored resume analysis', e);
+    }
+  }, []);
+
   // Clean up object URL when component unmounts
   useEffect(() => {
     return () => {
@@ -121,8 +161,9 @@ export const ResumePage = () => {
     const jdMatchBonus = jobDescription.trim().length > 20 ? 8 : 0;
     const finalScore = Math.min(Math.max(baseScore + jdMatchBonus, 35), 98);
 
-    setAnalysisResult({
+    const resultObj = {
       score: finalScore,
+      fileName: file?.name || 'Anuj_Resume.pdf',
       metrics: {
         keywords: Math.min(finalScore - 5, 95),
         formatting: Math.min(finalScore + 10, 98),
@@ -174,7 +215,13 @@ export const ResumePage = () => {
           type: 'low'
         }
       ]
-    });
+    };
+
+    setAnalysisResult(resultObj);
+    localStorage.setItem('resumeScore', finalScore.toString());
+    localStorage.setItem('resumeAnalysis', JSON.stringify(resultObj));
+    if (file?.name) localStorage.setItem('resumeFileName', file.name);
+
     setIsAnalyzing(false);
     toast.success('Resume analysis completed successfully!');
   };

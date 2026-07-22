@@ -18,7 +18,14 @@ export default defineConfig({
     // ── CORS proxy for external platform APIs ───────────────────────────
     // Vite's proxy runs server-side so it bypasses browser CORS policies.
     proxy: {
-      // GeeksForGeeks own internal practice API (used by the GFG website itself)
+      // GeeksForGeeks website proxy
+      '/api-proxy/gfg-site': {
+        target: 'https://www.geeksforgeeks.org',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (p) => p.replace(/^\/api-proxy\/gfg-site/, ''),
+      },
+      // GeeksForGeeks internal practice API
       '/api-proxy/gfg-practice': {
         target: 'https://practiceapi.geeksforgeeks.org',
         changeOrigin: true,

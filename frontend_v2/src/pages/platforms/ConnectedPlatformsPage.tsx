@@ -8,7 +8,7 @@ import {
   Loader2
 } from 'lucide-react';
 import {
-  getConnectedPlatforms, addPlatform, removePlatform, fetchPlatformStats,
+  getConnectedPlatforms, addPlatform, removePlatform, fetchPlatformStats, cleanUsername,
   PLATFORM_META, type PlatformId, type PlatformStats, type PlatformConnection
 } from '../../api/platformsApi';
 
@@ -37,14 +37,14 @@ const PlatformCard = ({
   });
 
   const handleConnect = async () => {
-    const trimmed = username.trim();
-    if (!trimmed) {
-      toast.error('Please enter a username.');
+    const cleaned = cleanUsername(username, id);
+    if (!cleaned) {
+      toast.error('Please enter a valid username or profile URL.');
       return;
     }
     setConnecting(true);
     try {
-      addPlatform({ id, username: trimmed });
+      addPlatform({ id, username: cleaned });
       setUsername('');
       toast.success(`Connected to ${meta.name}!`);
     } finally {

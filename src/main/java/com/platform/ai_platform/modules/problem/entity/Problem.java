@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+
 @Entity
 @Table(name = "problems")
 @Getter
@@ -36,6 +37,16 @@ public class Problem {
     @CollectionTable(name = "problem_tags", joinColumns = @JoinColumn(name = "problem_id"))
     @Column(name = "tag")
     private List<String> tags;
+
+    @Column(name = "dsa_topic")
+    private String dsaTopic; // e.g. "Array", "Sliding Window"
+
+    @Column(name = "source_url")
+    private String sourceUrl; // LeetCode/GFG link
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source_platform")
+    private SourcePlatform sourcePlatform;
 
     @ElementCollection
     @CollectionTable(name = "problem_constraints", joinColumns = @JoinColumn(name = "problem_id"))
