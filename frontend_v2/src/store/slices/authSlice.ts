@@ -12,8 +12,6 @@ interface AuthState {
   isAuthenticated: boolean;
 }
 
-import { purgeLegacyGlobalKeys } from '../../utils/userStorage';
-
 const getInitialUser = (): User | null => {
   try {
     const raw = localStorage.getItem('auth_user');
@@ -42,7 +40,6 @@ const authSlice = createSlice({
       state.isAuthenticated = true;
       localStorage.setItem('token', action.payload.token);
       localStorage.setItem('auth_user', JSON.stringify(action.payload.user));
-      purgeLegacyGlobalKeys();
     },
     setUser: (state, action: PayloadAction<User>) => {
       state.user = action.payload;
@@ -54,7 +51,6 @@ const authSlice = createSlice({
       state.isAuthenticated = false;
       localStorage.removeItem('token');
       localStorage.removeItem('auth_user');
-      purgeLegacyGlobalKeys();
     },
   },
 });

@@ -29,7 +29,7 @@ export const login = async (data: LoginData): Promise<AuthResponse> => {
       token: 'demo-jwt-token-' + Date.now(),
       email: data.email,
       role: 'ADMIN',
-      id: 'user-demo-1',
+      id: 'user-' + data.email.toLowerCase().replace(/[^a-z0-9]/g, '_'),
     };
   }
 };
@@ -47,7 +47,7 @@ export const signup = async (data: SignupData): Promise<AuthResponse> => {
       token: 'demo-jwt-token-' + Date.now(),
       email: data.email,
       role: 'USER',
-      id: 'user-demo-1',
+      id: 'user-' + data.email.toLowerCase().replace(/[^a-z0-9]/g, '_'),
     };
   }
 };
@@ -57,10 +57,19 @@ export const getMe = async (): Promise<UserResponse> => {
     const response = await apiClient.get<UserResponse>('/auth/me');
     return response.data;
   } catch {
+    // Prefer the locally stored auth user from the last successful login
+    const raw = localStorage.getItem('auth_user');
+    if (raw) {
+      try {
+        const u = JSON.parse(raw);
+        if (u?.email && u?.id) return { id: u.id, email: u.email, role: u.role || 'USER' };
+      } catch {}
+    }
+    // Last resort anonymous fallback (should never reach here after a login)
     return {
-      id: 'user-demo-1',
-      email: 'jatanujverma@gmail.com',
-      role: 'ADMIN',
+      id: 'user-anonymous',
+      email: 'anonymous@local',
+      role: 'USER',
     };
   }
 };

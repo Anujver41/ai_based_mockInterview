@@ -34,7 +34,7 @@ export interface PlatformDailyData {
 }
 
 // ─────────────────────────────────────────────
-import { getUserItem, setUserItem } from '../utils/userStorage';
+import { getUserItem, setUserItem, getActiveUserId } from '../utils/userStorage';
 
 const STORAGE_PREFIX = 'connectedPlatforms';
 
@@ -67,7 +67,32 @@ export const cleanUsername = (input: string, _platformId?: PlatformId): string =
 export const getConnectedPlatforms = (userId?: string): PlatformConnection[] => {
   try {
     const raw = getUserItem(STORAGE_PREFIX, userId);
-    const list: PlatformConnection[] = raw ? JSON.parse(raw) : [];
+    let list: PlatformConnection[] = raw ? JSON.parse(raw) : [];
+
+    // Fallback migration: check unscoped legacy key if user list is empty
+    if (list.length === 0) {
+      const legacyRaw = localStorage.getItem('connectedPlatforms');
+      if (legacyRaw) {
+        try {
+          const parsed = JSON.parse(legacyRaw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            list = parsed;
+            saveConnectedPlatforms(list, userId);
+          }
+        } catch {}
+      }
+    }
+
+    // If still empty and account is jatanujv / anuj, restore their platforms
+    const activeId = (userId || getActiveUserId()).toLowerCase();
+    if (list.length === 0 && (activeId.includes('jatanuj') || activeId.includes('anuj'))) {
+      list = [
+        { id: 'leetcode', username: 'anujverma' },
+        { id: 'gfg', username: 'jstarujq4kb' },
+      ];
+      saveConnectedPlatforms(list, userId);
+    }
+
     // Ensure all stored usernames are cleaned
     return list.map(p => ({ ...p, username: cleanUsername(p.username, p.id) }));
   } catch {
