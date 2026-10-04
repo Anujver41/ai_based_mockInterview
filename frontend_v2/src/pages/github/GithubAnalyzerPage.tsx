@@ -19,7 +19,10 @@ import {
   PieChart, Pie, Cell, BarChart, Bar, Legend
 } from 'recharts';
 import toast from 'react-hot-toast';
+import { useSelector } from 'react-redux';
+import type { RootState } from '../../store/store';
 import { fetchGithubProfile, analyzeGithubProfile } from '../../api/githubApi';
+import { getUserItem, setUserItem, getActiveUserId } from '../../utils/userStorage';
 
 // Custom colors for charts
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#374151'];
@@ -35,8 +38,18 @@ const generateCommitData = (factor: number) => [
 ];
 
 export const GithubAnalyzerPage = () => {
-  const [usernameInput, setUsernameInput] = useState(() => localStorage.getItem('githubUsername') || 'Anujver41');
-  const [activeUsername, setActiveUsername] = useState<string | null>(() => localStorage.getItem('githubUsername') || 'Anujver41');
+  const { user } = useSelector((state: RootState) => state.auth);
+  const uid = user?.id || getActiveUserId();
+
+  const [usernameInput, setUsernameInput] = useState(() => getUserItem('githubUsername', uid) || '');
+  const [activeUsername, setActiveUsername] = useState<string | null>(() => getUserItem('githubUsername', uid) || null);
+
+  // Sync state when active user changes
+  React.useEffect(() => {
+    const saved = getUserItem('githubUsername', uid);
+    setUsernameInput(saved || '');
+    setActiveUsername(saved || null);
+  }, [uid]);
 
   // Fetch standard Github profile details
   const { 
@@ -45,7 +58,7 @@ export const GithubAnalyzerPage = () => {
     error: profileError, 
     refetch: refetchProfile 
   } = useQuery({
-    queryKey: ['github-profile', activeUsername],
+    queryKey: ['github-profile', uid, activeUsername],
     queryFn: () => fetchGithubProfile(activeUsername!),
     enabled: !!activeUsername,
     retry: false,
@@ -57,7 +70,7 @@ export const GithubAnalyzerPage = () => {
     isLoading: loadingAnalysis, 
     error: analysisError 
   } = useQuery({
-    queryKey: ['github-analysis', activeUsername],
+    queryKey: ['github-analysis', uid, activeUsername],
     queryFn: () => analyzeGithubProfile(activeUsername!),
     enabled: !!activeUsername,
     retry: false,
@@ -68,7 +81,7 @@ export const GithubAnalyzerPage = () => {
     data: repos, 
     isLoading: loadingRepos 
   } = useQuery({
-    queryKey: ['github-repos', activeUsername],
+    queryKey: ['github-repos', uid, activeUsername],
     queryFn: async () => {
       const res = await axios.get(`https://api.github.com/users/${activeUsername}/repos?sort=stars&per_page=6`);
       return res.data;
@@ -126,13 +139,13 @@ export const GithubAnalyzerPage = () => {
 
   const scores = getDeveloperScores();
 
-  // Persist score & active username to localStorage for Dashboard integration
+  // Persist score & active username to localStorage scoped to user for Dashboard integration
   React.useEffect(() => {
     if (scores.total > 0 && activeUsername) {
-      localStorage.setItem('githubScore', scores.total.toString());
-      localStorage.setItem('githubUsername', activeUsername);
+      setUserItem('githubScore', scores.total.toString(), uid);
+      setUserItem('githubUsername', activeUsername, uid);
     }
-  }, [scores.total, activeUsername]);
+  }, [scores.total, activeUsername, uid]);
   
   // Format language data for Recharts Pie Chart
   const getLanguageChartData = () => {

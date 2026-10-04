@@ -1,11 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useSelector } from 'react-redux';
+import type { RootState } from '../../store/store';
 import {
   UploadCloud, FileText, CheckCircle2, AlertCircle, 
   ArrowLeft, RefreshCw, Sparkles, AlertTriangle, 
   Plus, Check, Briefcase, Award, ArrowUpRight
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { getUserItem, setUserItem, removeUserItem, getActiveUserId } from '../../utils/userStorage';
 
 // Color themes based on score
 const getScoreTheme = (score: number) => {
@@ -15,6 +18,9 @@ const getScoreTheme = (score: number) => {
 };
 
 export const ResumePage = () => {
+  const { user } = useSelector((state: RootState) => state.auth);
+  const uid = user?.id || getActiveUserId();
+
   const [dragActive, setDragActive] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -36,45 +42,20 @@ export const ResumePage = () => {
     'Compiling suggestions and missing skills...'
   ];
 
-  // Load saved analysis from localStorage on mount
+  // Load saved analysis from localStorage scoped to active user on mount
   useEffect(() => {
     try {
-      const savedScore = localStorage.getItem('resumeScore');
-      const savedAnalysis = localStorage.getItem('resumeAnalysis');
+      const savedScore = getUserItem('resumeScore', uid);
+      const savedAnalysis = getUserItem('resumeAnalysis', uid);
       if (savedAnalysis) {
         setAnalysisResult(JSON.parse(savedAnalysis));
-      } else if (savedScore) {
-        // Fallback default structure if only score was saved
-        setAnalysisResult({
-          score: parseInt(savedScore, 10),
-          metrics: { keywords: 63, formatting: 78, structure: 70, experienceMatch: 56 },
-          missingKeywords: [
-            { name: 'Kubernetes', priority: 'high' },
-            { name: 'System Design', priority: 'high' },
-            { name: 'CI/CD Pipelines', priority: 'high' },
-            { name: 'Redis Caching', priority: 'medium' },
-            { name: 'Microservices', priority: 'medium' },
-            { name: 'Unit Testing', priority: 'medium' },
-            { name: 'AWS Cloud', priority: 'medium' },
-            { name: 'Kafka', priority: 'low' },
-            { name: 'Agile/Scrum', priority: 'low' },
-          ],
-          suggestions: [
-            {
-              id: 1,
-              category: 'Experience & Impact',
-              title: 'Quantify your achievements with metrics',
-              description: 'Rewrite bullet points to follow the Google X-Y-Z formula (e.g. Accomplished [X] as measured by [Y], by doing [Z]). Add concrete percentages or cost savings.',
-              impact: '+12 ATS Points',
-              type: 'high'
-            }
-          ]
-        });
+      } else {
+        setAnalysisResult(null);
       }
-    } catch (e) {
-      console.error('Failed to load stored resume analysis', e);
+    } catch {
+      setAnalysisResult(null);
     }
-  }, []);
+  }, [uid]);
 
   // Clean up object URL when component unmounts
   useEffect(() => {
@@ -218,9 +199,9 @@ export const ResumePage = () => {
     };
 
     setAnalysisResult(resultObj);
-    localStorage.setItem('resumeScore', finalScore.toString());
-    localStorage.setItem('resumeAnalysis', JSON.stringify(resultObj));
-    if (file?.name) localStorage.setItem('resumeFileName', file.name);
+    setUserItem('resumeScore', finalScore.toString(), uid);
+    setUserItem('resumeAnalysis', JSON.stringify(resultObj), uid);
+    if (file?.name) setUserItem('resumeFileName', file.name, uid);
 
     setIsAnalyzing(false);
     toast.success('Resume analysis completed successfully!');
@@ -231,6 +212,9 @@ export const ResumePage = () => {
     if (pdfUrl) URL.revokeObjectURL(pdfUrl);
     setPdfUrl(null);
     setAnalysisResult(null);
+    removeUserItem('resumeScore', uid);
+    removeUserItem('resumeAnalysis', uid);
+    removeUserItem('resumeFileName', uid);
   };
 
   return (

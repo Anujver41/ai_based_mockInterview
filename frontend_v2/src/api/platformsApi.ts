@@ -34,9 +34,9 @@ export interface PlatformDailyData {
 }
 
 // ─────────────────────────────────────────────
-// LocalStorage helpers
-// ─────────────────────────────────────────────
-const STORAGE_KEY = 'connectedPlatforms';
+import { getUserItem, setUserItem } from '../utils/userStorage';
+
+const STORAGE_PREFIX = 'connectedPlatforms';
 
 export const cleanUsername = (input: string, _platformId?: PlatformId): string => {
   if (!input) return '';
@@ -64,9 +64,9 @@ export const cleanUsername = (input: string, _platformId?: PlatformId): string =
   return u.replace(/^@/, '');
 };
 
-export const getConnectedPlatforms = (): PlatformConnection[] => {
+export const getConnectedPlatforms = (userId?: string): PlatformConnection[] => {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = getUserItem(STORAGE_PREFIX, userId);
     const list: PlatformConnection[] = raw ? JSON.parse(raw) : [];
     // Ensure all stored usernames are cleaned
     return list.map(p => ({ ...p, username: cleanUsername(p.username, p.id) }));
@@ -75,20 +75,20 @@ export const getConnectedPlatforms = (): PlatformConnection[] => {
   }
 };
 
-export const saveConnectedPlatforms = (platforms: PlatformConnection[]) => {
+export const saveConnectedPlatforms = (platforms: PlatformConnection[], userId?: string) => {
   const cleaned = platforms.map(p => ({ ...p, username: cleanUsername(p.username, p.id) }));
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
+  setUserItem(STORAGE_PREFIX, JSON.stringify(cleaned), userId);
 };
 
-export const addPlatform = (connection: PlatformConnection) => {
+export const addPlatform = (connection: PlatformConnection, userId?: string) => {
   const cleanConn = { ...connection, username: cleanUsername(connection.username, connection.id) };
-  const existing = getConnectedPlatforms().filter(p => p.id !== cleanConn.id);
-  saveConnectedPlatforms([...existing, cleanConn]);
+  const existing = getConnectedPlatforms(userId).filter(p => p.id !== cleanConn.id);
+  saveConnectedPlatforms([...existing, cleanConn], userId);
 };
 
-export const removePlatform = (id: PlatformId) => {
-  const updated = getConnectedPlatforms().filter(p => p.id !== id);
-  saveConnectedPlatforms(updated);
+export const removePlatform = (id: PlatformId, userId?: string) => {
+  const updated = getConnectedPlatforms(userId).filter(p => p.id !== id);
+  saveConnectedPlatforms(updated, userId);
 };
 
 // ─────────────────────────────────────────────

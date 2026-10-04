@@ -21,6 +21,7 @@ import {
   type PlatformStats, type PlatformDailyData
 } from '../../api/platformsApi';
 import { TopicDrillModal } from '../../components/TopicDrillModal';
+import { getUserItem, getActiveUserId } from '../../utils/userStorage';
 
 export const DashboardPage = () => {
   const { user } = useSelector((state: RootState) => state.auth);
@@ -38,7 +39,7 @@ export const DashboardPage = () => {
 
   // Fetch interview sessions
   const { data: sessions, isLoading: sessionsLoading } = useQuery({
-    queryKey: ['interview-sessions-dashboard'],
+    queryKey: ['interview-sessions-dashboard', user?.id],
     queryFn: getUserSessions,
     enabled: !!user?.id,
   });
@@ -52,16 +53,16 @@ export const DashboardPage = () => {
   const problems = problemsPage?.content || [];
   const problemMap = new Map(problems.map(p => [p.id, p]));
 
-  // 4. Connected external platforms stats (15s stale time + refetch on focus for live updating)
-  const connectedPlatforms = getConnectedPlatforms();
+  // 4. Connected external platforms stats scoped to current user
+  const connectedPlatforms = getConnectedPlatforms(user?.id);
   const {
     data: platformStatsList = [],
     refetch: refetchPlatformStats,
     isFetching: isFetchingStats
   } = useQuery<PlatformStats[]>({
-    queryKey: ['all-platform-stats', connectedPlatforms.map(c => `${c.id}:${c.username}`).join(',')],
+    queryKey: ['all-platform-stats', user?.id, connectedPlatforms.map(c => `${c.id}:${c.username}`).join(',')],
     queryFn: () => Promise.all(connectedPlatforms.map(c => fetchPlatformStats(c))),
-    enabled: connectedPlatforms.length > 0,
+    enabled: !!user?.id && connectedPlatforms.length > 0,
     staleTime: 1000 * 15,
     refetchOnWindowFocus: true,
     retry: 1,
@@ -73,9 +74,9 @@ export const DashboardPage = () => {
     refetch: refetchPlatformDaily,
     isFetching: isFetchingDaily
   } = useQuery<PlatformDailyData[]>({
-    queryKey: ['platform-daily-data', connectedPlatforms.map(c => `${c.id}:${c.username}`).join(',')],
+    queryKey: ['platform-daily-data', user?.id, connectedPlatforms.map(c => `${c.id}:${c.username}`).join(',')],
     queryFn: () => Promise.all(connectedPlatforms.map(c => fetchPlatformDailyData(c))),
-    enabled: connectedPlatforms.length > 0,
+    enabled: !!user?.id && connectedPlatforms.length > 0,
     staleTime: 1000 * 15,
     refetchOnWindowFocus: true,
     retry: 1,
@@ -83,12 +84,12 @@ export const DashboardPage = () => {
 
   // 4c. Real skill topics for LeetCode
   const { data: leetcodeSkillMap = {} } = useQuery<Record<string, number>>({
-    queryKey: ['leetcode-skill-topics', connectedPlatforms.find(c => c.id === 'leetcode')?.username],
+    queryKey: ['leetcode-skill-topics', user?.id, connectedPlatforms.find(c => c.id === 'leetcode')?.username],
     queryFn: () => {
       const conn = connectedPlatforms.find(c => c.id === 'leetcode');
       return conn ? fetchLeetCodeSkillTopics(conn.username) : Promise.resolve({});
     },
-    enabled: !!connectedPlatforms.find(c => c.id === 'leetcode'),
+    enabled: !!user?.id && !!connectedPlatforms.find(c => c.id === 'leetcode'),
     staleTime: 1000 * 60 * 30,
   });
 
@@ -252,14 +253,18 @@ export const DashboardPage = () => {
     return 'D';
   };
 
-  const resumeScore = localStorage.getItem('resumeScore') || (localStorage.getItem('resumeAnalysis') ? JSON.parse(localStorage.getItem('resumeAnalysis')!).score.toString() : '68');
-  const githubScore = localStorage.getItem('githubScore') || '87';
+  const uid = user?.id || getActiveUserId();
+  const savedResumeScore = getUserItem('resumeScore', uid);
+  const resumeAnalysisRaw = getUserItem('resumeAnalysis', uid);
+  const resumeScore = savedResumeScore || (resumeAnalysisRaw ? JSON.parse(resumeAnalysisRaw).score?.toString() : null);
+
+  const githubScore = getUserItem('githubScore', uid);
 
   const secondaryStats = [
     { label: 'Total Submissions', value: totalSubmissions.toString(), icon: Activity, color: 'text-cyan-500', link: '/submissions' },
-    { label: 'AI Reviews', value: localStorage.getItem('aiReviewsCount') || '0', icon: Zap, color: 'text-yellow-500', link: '/problems' },
-    { label: 'Resume ATS Score', value: `${resumeScore} / 100`, icon: FileText, color: 'text-pink-500', link: '/resume' },
-    { label: 'GitHub Profile Score', value: `${githubScore} / 100 (${getGithubGrade(githubScore)})`, icon: GitBranch, color: 'text-blue-400', link: '/github' },
+    { label: 'AI Reviews', value: getUserItem('aiReviewsCount', uid) || '0', icon: Zap, color: 'text-yellow-500', link: '/problems' },
+    { label: 'Resume ATS Score', value: resumeScore ? `${resumeScore} / 100` : 'Not Analyzed', icon: FileText, color: 'text-pink-500', link: '/resume' },
+    { label: 'GitHub Profile Score', value: githubScore ? `${githubScore} / 100 (${getGithubGrade(githubScore)})` : 'Not Connected', icon: GitBranch, color: 'text-blue-400', link: '/github' },
   ];
 
   // 7. Line Chart: aggregate daily solved from ALL platforms (this + external)

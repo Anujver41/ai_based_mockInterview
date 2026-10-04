@@ -259,15 +259,17 @@ export const evaluateClientSide = (
   };
 };
 
+import { getUserItem, setUserItem, getUserKey } from '../utils/userStorage';
+
 export const submitCode = async (request: SubmissionRequest): Promise<SubmissionResponse> => {
   try {
     const response = await apiClient.post<SubmissionResponse>(SUBMISSIONS, request);
     if (!request.isRun && response.data) {
-      // Also cache successful submission in local storage
+      // Also cache successful submission in local storage scoped to user
       try {
-        const all: SubmissionResponse[] = JSON.parse(localStorage.getItem('all_submissions') || '[]');
+        const all: SubmissionResponse[] = JSON.parse(getUserItem('all_submissions', request.userId) || '[]');
         const updatedAll = [response.data, ...all.filter(s => s.id !== response.data.id && !s.isRun)].slice(0, 100);
-        localStorage.setItem('all_submissions', JSON.stringify(updatedAll));
+        setUserItem('all_submissions', JSON.stringify(updatedAll), request.userId);
       } catch {}
     }
     return response.data;
@@ -290,16 +292,16 @@ export const submitCode = async (request: SubmissionRequest): Promise<Submission
       createdAt: new Date().toISOString(),
     };
 
-    // If it was a SUBMIT (not Run), persist into localStorage
+    // If it was a SUBMIT (not Run), persist into user-scoped localStorage
     if (!request.isRun) {
       try {
-        // Save to global all_submissions
-        const all: SubmissionResponse[] = JSON.parse(localStorage.getItem('all_submissions') || '[]');
+        // Save to user-scoped all_submissions
+        const all: SubmissionResponse[] = JSON.parse(getUserItem('all_submissions', request.userId) || '[]');
         const updatedAll = [result, ...all.filter(s => s.id !== result.id && !s.isRun)].slice(0, 100);
-        localStorage.setItem('all_submissions', JSON.stringify(updatedAll));
+        setUserItem('all_submissions', JSON.stringify(updatedAll), request.userId);
 
-        // Save to problem-specific localHistory
-        const pKey = `localHistory-${request.problemId}`;
+        // Save to problem-specific localHistory scoped to user
+        const pKey = getUserKey(`localHistory-${request.problemId}`, request.userId);
         const perProblem: SubmissionResponse[] = JSON.parse(localStorage.getItem(pKey) || '[]');
         const updatedPerProblem = [result, ...perProblem.filter(s => s.id !== result.id && !s.isRun)].slice(0, 50);
         localStorage.setItem(pKey, JSON.stringify(updatedPerProblem));
@@ -338,9 +340,9 @@ export const getSubmissionStatus = async (id: number): Promise<SubmissionRespons
 export const getUserSubmissions = async (userId: string): Promise<SubmissionResponse[]> => {
   let localSubs: SubmissionResponse[] = [];
   try {
-    const raw = localStorage.getItem('all_submissions');
+    const raw = getUserItem('all_submissions', userId);
     if (raw) {
-      localSubs = (JSON.parse(raw) as SubmissionResponse[]).filter(s => !s.isRun);
+      localSubs = (JSON.parse(raw) as SubmissionResponse[]).filter(s => !s.isRun && s.userId === userId);
     }
   } catch {}
 

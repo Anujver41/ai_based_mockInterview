@@ -12,8 +12,19 @@ interface AuthState {
   isAuthenticated: boolean;
 }
 
+import { purgeLegacyGlobalKeys } from '../../utils/userStorage';
+
+const getInitialUser = (): User | null => {
+  try {
+    const raw = localStorage.getItem('auth_user');
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
 const initialState: AuthState = {
-  user: null,
+  user: getInitialUser(),
   token: localStorage.getItem('token'),
   isAuthenticated: !!localStorage.getItem('token'),
 };
@@ -30,15 +41,20 @@ const authSlice = createSlice({
       state.token = action.payload.token;
       state.isAuthenticated = true;
       localStorage.setItem('token', action.payload.token);
+      localStorage.setItem('auth_user', JSON.stringify(action.payload.user));
+      purgeLegacyGlobalKeys();
     },
     setUser: (state, action: PayloadAction<User>) => {
       state.user = action.payload;
+      localStorage.setItem('auth_user', JSON.stringify(action.payload));
     },
     logout: (state) => {
       state.user = null;
       state.token = null;
       state.isAuthenticated = false;
       localStorage.removeItem('token');
+      localStorage.removeItem('auth_user');
+      purgeLegacyGlobalKeys();
     },
   },
 });

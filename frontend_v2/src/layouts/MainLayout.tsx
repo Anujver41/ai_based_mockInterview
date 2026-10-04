@@ -23,12 +23,20 @@ const NAV_ITEMS = [
   { name: 'Settings', path: '/settings', icon: Settings },
 ];
 
+import { useQueryClient } from '@tanstack/react-query';
+
 export const MainLayout = () => {
   const { theme, setTheme } = useTheme();
   const { isAuthenticated, user } = useSelector((state: RootState) => state.auth);
   const dispatch = useDispatch();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const handleLogout = () => {
+    queryClient.clear();
+    dispatch(logout());
+  };
 
   const [unauthNavOpen, setUnauthNavOpen] = useState(false);
 
@@ -224,7 +232,7 @@ export const MainLayout = () => {
         {/* Sidebar Footer */}
         <div className="p-4 border-t border-border">
           <button 
-            onClick={() => dispatch(logout())}
+            onClick={handleLogout}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
           >
             <LogOut className="w-5 h-5" />

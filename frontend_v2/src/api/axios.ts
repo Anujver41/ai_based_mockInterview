@@ -7,10 +7,20 @@ if (BASE_URL && !BASE_URL.endsWith('/api/v1') && !BASE_URL.endsWith('/api/v1/'))
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,
+  timeout: 30000, // 30 second timeout to accommodate production cold starts (Render/Railway/etc.)
   headers: {
     'Content-Type': 'application/json',
   },
 });
+
+// Non-blocking background ping to wake up sleeping production servers on app load
+export const prewarmBackend = () => {
+  if (typeof window !== 'undefined' && BASE_URL) {
+    fetch(`${BASE_URL}/auth/me`, { method: 'GET' }).catch(() => {
+      // Intentionally silent: this is purely to trigger server spin-up
+    });
+  }
+};
 
 // Request Interceptor to add JWT token
 apiClient.interceptors.request.use(

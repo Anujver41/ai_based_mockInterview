@@ -12,16 +12,23 @@ import {
   PLATFORM_META, type PlatformId, type PlatformStats, type PlatformConnection
 } from '../../api/platformsApi';
 
+import { useSelector } from 'react-redux';
+import type { RootState } from '../../store/store';
+
 const PLATFORM_IDS: PlatformId[] = ['leetcode', 'gfg', 'codeforces', 'hackerrank'];
 
 // ── Single Platform Card ──────────────────────────────────────────────────────
 const PlatformCard = ({
   id,
   connection,
+  userId,
+  onConnect,
   onDisconnect,
 }: {
   id: PlatformId;
   connection?: PlatformConnection;
+  userId?: string;
+  onConnect: () => void;
   onDisconnect: (id: PlatformId) => void;
 }) => {
   const meta = PLATFORM_META[id];
@@ -29,7 +36,7 @@ const PlatformCard = ({
   const [connecting, setConnecting] = useState(false);
 
   const { data: stats, isLoading, isError, refetch } = useQuery<PlatformStats>({
-    queryKey: ['platform-stats', id, connection?.username],
+    queryKey: ['platform-stats', userId, id, connection?.username],
     queryFn: () => fetchPlatformStats(connection!),
     enabled: !!connection?.username,
     staleTime: 1000 * 60 * 5, // 5 min
@@ -44,16 +51,17 @@ const PlatformCard = ({
     }
     setConnecting(true);
     try {
-      addPlatform({ id, username: cleaned });
+      addPlatform({ id, username: cleaned }, userId);
       setUsername('');
       toast.success(`Connected to ${meta.name}!`);
+      onConnect();
     } finally {
       setConnecting(false);
     }
   };
 
   const handleDisconnect = () => {
-    removePlatform(id);
+    removePlatform(id, userId);
     onDisconnect(id);
     toast.success(`Disconnected from ${meta.name}`);
   };
@@ -228,20 +236,21 @@ const PlatformCard = ({
 // ── Main Page ─────────────────────────────────────────────────────────────────
 const ConnectedPlatformsPage = () => {
   const queryClient = useQueryClient();
-  const [connections, setConnections] = useState<PlatformConnection[]>(() => getConnectedPlatforms());
+  const { user } = useSelector((state: RootState) => state.auth);
+  const [connections, setConnections] = useState<PlatformConnection[]>(() => getConnectedPlatforms(user?.id));
 
   // Reload connections from localStorage whenever a platform connects/disconnects
-  const refresh = () => setConnections(getConnectedPlatforms());
+  const refresh = () => setConnections(getConnectedPlatforms(user?.id));
 
   const handleDisconnect = (id: PlatformId) => {
-    queryClient.invalidateQueries({ queryKey: ['platform-stats', id] });
+    queryClient.invalidateQueries({ queryKey: ['platform-stats', user?.id, id] });
     refresh();
   };
 
   // Listen for changes (connect triggers re-render)
   useEffect(() => {
     refresh();
-  }, []);
+  }, [user?.id]);
 
   const connectedCount = connections.length;
   const totalSolvedAcrossPlatforms = 0; // will be computed from query data in dashboard
@@ -308,7 +317,9 @@ const ConnectedPlatformsPage = () => {
             <PlatformCard
               key={id}
               id={id}
+              userId={user?.id}
               connection={connections.find(c => c.id === id)}
+              onConnect={refresh}
               onDisconnect={handleDisconnect}
             />
           ))}

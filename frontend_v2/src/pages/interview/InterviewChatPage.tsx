@@ -6,6 +6,7 @@ import {
   getSessionMessages, sendChatMessage, endInterview,
   InterviewMessageResponse, InterviewSessionResponse, getUserSessions, getProblemsForTopic
 } from '../../api/interviewApi';
+import { getUserItem, setUserItem } from '../../utils/userStorage';
 import {
   Brain, Send, ChevronLeft, Square, Clock,
   Loader2, AlertCircle, Mic, MicOff, MessageSquare,
@@ -469,14 +470,14 @@ const InterviewChatPage = () => {
 
         // Update session in localStorage immediately with solvedCount and score
         try {
-          const allSessions: InterviewSessionResponse[] = JSON.parse(localStorage.getItem('interview_sessions') || '[]');
+          const allSessions: InterviewSessionResponse[] = JSON.parse(getUserItem('interview_sessions') || '[]');
           const updated = allSessions.map(s => s.id === sessionId ? {
             ...s,
             solvedCount: currentSolvedCount,
             totalQuestions: 2,
             score: currentSolvedCount === 2 ? '9.5/10' : '7.0/10'
           } : s);
-          localStorage.setItem('interview_sessions', JSON.stringify(updated));
+          setUserItem('interview_sessions', JSON.stringify(updated));
           queryClient.invalidateQueries({ queryKey: ['interview-sessions'] });
         } catch {}
 

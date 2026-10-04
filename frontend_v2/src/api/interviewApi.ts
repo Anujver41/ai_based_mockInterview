@@ -625,13 +625,15 @@ function generateContextualInterviewResponse(
   );
 }
 
+import { getUserItem, setUserItem } from '../utils/userStorage';
+
 export const startInterview = async (request: StartInterviewRequest): Promise<InterviewSessionResponse> => {
   try {
     const response = await apiClient.post<InterviewSessionResponse>(`${INTERVIEWS}/start`, request);
     if (response.data) {
       try {
-        const existing: InterviewSessionResponse[] = JSON.parse(localStorage.getItem('interview_sessions') || '[]');
-        localStorage.setItem('interview_sessions', JSON.stringify([response.data, ...existing.filter(s => s.id !== response.data.id)]));
+        const existing: InterviewSessionResponse[] = JSON.parse(getUserItem('interview_sessions') || '[]');
+        setUserItem('interview_sessions', JSON.stringify([response.data, ...existing.filter(s => s.id !== response.data.id)]));
       } catch {}
     }
     return response.data;
@@ -644,8 +646,8 @@ export const startInterview = async (request: StartInterviewRequest): Promise<In
       createdAt: new Date().toISOString(),
     };
     try {
-      const existing: InterviewSessionResponse[] = JSON.parse(localStorage.getItem('interview_sessions') || '[]');
-      localStorage.setItem('interview_sessions', JSON.stringify([session, ...existing]));
+      const existing: InterviewSessionResponse[] = JSON.parse(getUserItem('interview_sessions') || '[]');
+      setUserItem('interview_sessions', JSON.stringify([session, ...existing]));
     } catch {}
     return session;
   }
@@ -699,7 +701,7 @@ export const sendChatMessage = async (sessionId: string, content: string): Promi
 export const getUserSessions = async (): Promise<InterviewSessionResponse[]> => {
   let localSessions: InterviewSessionResponse[] = [];
   try {
-    localSessions = JSON.parse(localStorage.getItem('interview_sessions') || '[]');
+    localSessions = JSON.parse(getUserItem('interview_sessions') || '[]');
   } catch {}
 
   try {
@@ -730,7 +732,7 @@ export const getSessionMessages = async (sessionId: string): Promise<InterviewMe
     let topic = 'Arrays & Hashing';
     let difficulty = 'EASY';
     try {
-      const sessions: InterviewSessionResponse[] = JSON.parse(localStorage.getItem('interview_sessions') || '[]');
+      const sessions: InterviewSessionResponse[] = JSON.parse(getUserItem('interview_sessions') || '[]');
       const current = sessions.find(s => s.id === sessionId);
       if (current?.topic) topic = current.topic;
       if (current?.difficulty) difficulty = current.difficulty;
