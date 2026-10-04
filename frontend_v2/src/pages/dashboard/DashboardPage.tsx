@@ -54,7 +54,8 @@ export const DashboardPage = () => {
   const problemMap = new Map(problems.map(p => [p.id, p]));
 
   // 4. Connected external platforms stats scoped to current user
-  const connectedPlatforms = getConnectedPlatforms(user?.id);
+  // Use email as stable identifier (backend numeric ID changes across deployments)
+  const connectedPlatforms = getConnectedPlatforms(user?.email);
   const {
     data: platformStatsList = [],
     refetch: refetchPlatformStats,
@@ -253,7 +254,7 @@ export const DashboardPage = () => {
     return 'D';
   };
 
-  const uid = user?.id || getActiveUserId();
+  const uid = user?.email || getActiveUserId();
   const savedResumeScore = getUserItem('resumeScore', uid);
   const resumeAnalysisRaw = getUserItem('resumeAnalysis', uid);
   let resumeScore = savedResumeScore || (resumeAnalysisRaw ? JSON.parse(resumeAnalysisRaw).score?.toString() : null);

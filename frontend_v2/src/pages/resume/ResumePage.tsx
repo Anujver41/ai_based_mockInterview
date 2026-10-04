@@ -19,7 +19,8 @@ const getScoreTheme = (score: number) => {
 
 export const ResumePage = () => {
   const { user } = useSelector((state: RootState) => state.auth);
-  const uid = user?.id || getActiveUserId();
+  // Use email as stable identifier — backend numeric ID may differ across deployments
+  const uid = user?.email || getActiveUserId();
 
   const [dragActive, setDragActive] = useState(false);
   const [file, setFile] = useState<File | null>(null);

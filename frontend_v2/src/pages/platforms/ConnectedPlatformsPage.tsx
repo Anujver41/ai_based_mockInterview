@@ -237,20 +237,21 @@ const PlatformCard = ({
 const ConnectedPlatformsPage = () => {
   const queryClient = useQueryClient();
   const { user } = useSelector((state: RootState) => state.auth);
-  const [connections, setConnections] = useState<PlatformConnection[]>(() => getConnectedPlatforms(user?.id));
+  // Use email as stable identifier for storage — backend numeric ID changes between deployments
+  const [connections, setConnections] = useState<PlatformConnection[]>(() => getConnectedPlatforms(user?.email));
 
   // Reload connections from localStorage whenever a platform connects/disconnects
-  const refresh = () => setConnections(getConnectedPlatforms(user?.id));
+  const refresh = () => setConnections(getConnectedPlatforms(user?.email));
 
   const handleDisconnect = (id: PlatformId) => {
-    queryClient.invalidateQueries({ queryKey: ['platform-stats', user?.id, id] });
+    queryClient.invalidateQueries({ queryKey: ['platform-stats', user?.email, id] });
     refresh();
   };
 
   // Listen for changes (connect triggers re-render)
   useEffect(() => {
     refresh();
-  }, [user?.id]);
+  }, [user?.email]);
 
   const connectedCount = connections.length;
   const totalSolvedAcrossPlatforms = 0; // will be computed from query data in dashboard
@@ -317,7 +318,7 @@ const ConnectedPlatformsPage = () => {
             <PlatformCard
               key={id}
               id={id}
-              userId={user?.id}
+              userId={user?.email}
               connection={connections.find(c => c.id === id)}
               onConnect={refresh}
               onDisconnect={handleDisconnect}

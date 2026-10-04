@@ -39,7 +39,8 @@ const generateCommitData = (factor: number) => [
 
 export const GithubAnalyzerPage = () => {
   const { user } = useSelector((state: RootState) => state.auth);
-  const uid = user?.id || getActiveUserId();
+  // Use email as stable identifier — backend numeric ID may differ across deployments
+  const uid = user?.email || getActiveUserId();
 
   const [usernameInput, setUsernameInput] = useState(() => getUserItem('githubUsername', uid) || '');
   const [activeUsername, setActiveUsername] = useState<string | null>(() => getUserItem('githubUsername', uid) || null);
