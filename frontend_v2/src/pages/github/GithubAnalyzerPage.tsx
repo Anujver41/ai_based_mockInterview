@@ -174,7 +174,7 @@ export const GithubAnalyzerPage = () => {
   };
 
   const isLoading = loadingProfile || loadingAnalysis || loadingRepos;
-  const isError = profileError || analysisError;
+  const isError = profileError; // analysisError handled via offline fallback in githubApi.ts
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 pb-12">
