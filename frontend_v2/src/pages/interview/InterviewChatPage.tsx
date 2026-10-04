@@ -470,7 +470,7 @@ const InterviewChatPage = () => {
   const selectedLangObj = LANGUAGES.find(l => l.id === selectedLang) || LANGUAGES[0];
 
   return (
-    <div className="flex flex-col h-[calc(100vh-6rem)] -mx-4 md:-mx-8 overflow-hidden bg-background">
+    <div className="flex flex-col h-[calc(100vh-4rem)] w-full overflow-hidden bg-background">
       {/* ── Top Header ── */}
       <div className="flex items-center justify-between px-4 md:px-6 py-2.5 border-b border-border bg-card shrink-0">
         <div className="flex items-center gap-3">

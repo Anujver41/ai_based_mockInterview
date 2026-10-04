@@ -5,12 +5,13 @@ interface UseSubmissionPollingOptions {
   intervalMs?: number;
   maxAttempts?: number;
   onComplete?: (submission: SubmissionResponse) => void;
+  onFallback?: () => void; // called when backend is unreachable → triggers client-side eval
 }
 
 const TERMINAL_STATUSES: SubmissionStatus[] = ['PASSED', 'FAILED'];
 
 export function useSubmissionPolling(options: UseSubmissionPollingOptions = {}) {
-  const { intervalMs = 1500, maxAttempts = 40, onComplete } = options;
+  const { intervalMs = 1500, maxAttempts = 20, onComplete, onFallback } = options;
 
   const [submissionId, setSubmissionId] = useState<number | null>(null);
   const [submission, setSubmission] = useState<SubmissionResponse | null>(null);
@@ -54,12 +55,16 @@ export function useSubmissionPolling(options: UseSubmissionPollingOptions = {}) 
 
         if (attemptRef.current >= maxAttempts) {
           stopPolling();
-          setError('Polling timed out. The submission is still being processed.');
+          // Backend is too slow — trigger client-side fallback
+          onFallback?.();
+          setError(null);
           return;
         }
       } catch (err: any) {
         stopPolling();
-        setError(err?.response?.data?.message || 'Failed to fetch submission status.');
+        // Backend unreachable — trigger client-side fallback instead of showing error
+        onFallback?.();
+        setError(null);
       }
     };
 
@@ -74,7 +79,7 @@ export function useSubmissionPolling(options: UseSubmissionPollingOptions = {}) 
         intervalRef.current = null;
       }
     };
-  }, [isPolling, submissionId, intervalMs, maxAttempts, stopPolling, onComplete]);
+  }, [isPolling, submissionId, intervalMs, maxAttempts, stopPolling, onComplete, onFallback]);
 
   return { submission, isPolling, error, startPolling, stopPolling };
 }

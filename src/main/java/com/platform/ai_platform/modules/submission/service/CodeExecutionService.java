@@ -92,8 +92,13 @@ public class CodeExecutionService {
     }
 
     private ExecutionResult executePython(String code, String input, Path tempDir) throws IOException, InterruptedException {
+        String fullCode = code;
+        // Inject wrapper if code defines solve(input) but doesn't read sys.stdin
+        if (code.contains("def solve(") && !code.contains("sys.stdin")) {
+            fullCode = code + "\n\nimport sys\nif __name__ == '__main__':\n    raw_input = sys.stdin.read()\n    res = solve(raw_input)\n    if res is not None:\n        print(res)\n";
+        }
         Path sourceFile = tempDir.resolve("solution.py");
-        Files.writeString(sourceFile, code);
+        Files.writeString(sourceFile, fullCode);
 
         // Try python3 first, fall back to python
         String pythonCmd = isProgramAvailable("python3") ? "python3" : "python";
@@ -104,8 +109,13 @@ public class CodeExecutionService {
     }
 
     private ExecutionResult executeJavaScript(String code, String input, Path tempDir) throws IOException, InterruptedException {
+        String fullCode = code;
+        // Inject wrapper if code defines solve(input) but doesn't read stdin
+        if (code.contains("function solve(") && !code.contains("fs.readFileSync")) {
+            fullCode = code + "\n\nconst fs = require('fs');\nconst rawInput = fs.readFileSync(0, 'utf-8');\nconst res = solve(rawInput);\nif (res !== undefined) console.log(res);\n";
+        }
         Path sourceFile = tempDir.resolve("solution.js");
-        Files.writeString(sourceFile, code);
+        Files.writeString(sourceFile, fullCode);
 
         ProcessBuilder runBuilder = new ProcessBuilder("node", sourceFile.toString());
         runBuilder.directory(tempDir.toFile());

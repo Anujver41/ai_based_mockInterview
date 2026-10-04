@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getUserSubmissions, SubmissionResponse } from '../../api/submissionApi';
+import { DEFAULT_PROBLEMS } from '../../api/problemApi';
 import { useSelector } from 'react-redux';
 import type { RootState } from '../../store/store';
 import { Link } from 'react-router-dom';
@@ -14,10 +15,11 @@ const SubmissionHistoryPage = () => {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [langFilter, setLangFilter] = useState<string>('ALL');
 
+  const effectiveUserId = user?.id || 'guest_user';
+
   const { data: submissions, isLoading, error } = useQuery({
-    queryKey: ['all-submissions', user?.id],
-    queryFn: () => getUserSubmissions(user?.id!),
-    enabled: !!user?.id,
+    queryKey: ['all-submissions', effectiveUserId],
+    queryFn: () => getUserSubmissions(effectiveUserId),
   });
 
   const getStatusIcon = (status: string) => {
@@ -181,16 +183,26 @@ const SubmissionHistoryPage = () => {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className={getStatusBadge(sub.status)}>
-                    {sub.status === 'PASSED' ? 'Accepted' : sub.status}
+                    {sub.status === 'PASSED' ? 'Accepted' : 'Wrong Answer'}
                   </span>
-                  <span className="text-xs text-muted-foreground px-2 py-0.5 bg-muted rounded">
+                  <span className="text-xs font-semibold text-foreground">
+                    {DEFAULT_PROBLEMS.find(p => p.id === sub.problemId || p.id === `p-${sub.problemId}` || `p-${p.id}` === sub.problemId)?.title || `Problem #${sub.problemId}`}
+                  </span>
+                  <span className="text-xs text-muted-foreground px-2 py-0.5 bg-muted rounded font-mono">
                     {sub.language}
                   </span>
-                  <span className="text-xs text-muted-foreground">
-                    Problem #{sub.problemId}
-                  </span>
+                  {sub.testResults && sub.testResults.length > 0 && (
+                    <span className={`text-xs font-medium ${sub.status === 'PASSED' ? 'text-green-400' : 'text-yellow-400'}`}>
+                      {sub.testResults.filter(r => r.passed).length}/{sub.testResults.length} cases
+                    </span>
+                  )}
+                  {sub.runtimeMs !== undefined && (
+                    <span className="text-xs text-muted-foreground">
+                      {sub.runtimeMs} ms
+                    </span>
+                  )}
                 </div>
-                {sub.errorMessage && (
+                {sub.errorMessage && sub.status !== 'PASSED' && (
                   <p className="text-xs text-red-400 mt-1 truncate max-w-md">
                     {sub.errorMessage}
                   </p>

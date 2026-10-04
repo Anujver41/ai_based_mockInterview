@@ -30,31 +30,145 @@ export const MainLayout = () => {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  const [unauthNavOpen, setUnauthNavOpen] = useState(false);
+
+  const isFullBleed = (location.pathname.startsWith('/problems/') && location.pathname !== '/problems') ||
+                      location.pathname.startsWith('/code-review') ||
+                      location.pathname.startsWith('/interview/');
+
   // Close sidebar on route change on mobile
   useEffect(() => {
     setSidebarOpen(false);
+    setUnauthNavOpen(false);
   }, [location.pathname]);
 
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-background text-foreground flex flex-col font-sans transition-colors duration-300">
-        <header className="border-b border-border bg-card/50 backdrop-blur-md sticky top-0 z-50">
-          <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-            <Link to="/" className="text-xl font-bold tracking-tight flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                <Code2 className="w-5 h-5 text-primary-foreground" />
+        <header className="border-b border-border/80 bg-background/80 backdrop-blur-xl sticky top-0 z-50">
+          <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 h-16 flex items-center gap-6 w-full">
+            {/* Logo — always left */}
+            <Link to="/" className="text-xl font-bold tracking-tight flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-600 via-indigo-600 to-primary flex items-center justify-center shadow-md shadow-violet-500/20">
+                <Code2 className="w-5 h-5 text-white" />
               </div>
-              <span>AI.Platform</span>
+              <span className="font-extrabold tracking-tight">AI<span className="text-violet-500">.</span>Platform</span>
             </Link>
-            <div className="flex items-center gap-4">
-              <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="p-2 rounded-md hover:bg-muted transition-colors">
-                {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
-              </button>
-              <Link to="/login" className="bg-primary text-primary-foreground px-5 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-all shadow-md shadow-primary/20">
-                Login
+
+            {/* Desktop Navigation — grows to fill space, centered */}
+            <nav className="hidden md:flex flex-1 items-center justify-center gap-7 text-sm font-medium text-muted-foreground">
+              <a href="/#features" className="hover:text-foreground transition-colors">Features</a>
+              <a href="/#interactive-demo" className="hover:text-foreground transition-colors">Live Demo</a>
+              <a href="/#how-it-works" className="hover:text-foreground transition-colors">How It Works</a>
+              <Link to="/problems" className="hover:text-foreground transition-colors flex items-center gap-1">
+                <span>Problems</span>
+                <span className="text-[10px] bg-violet-500/15 text-violet-500 px-1.5 py-0.5 rounded-full font-bold">500+</span>
               </Link>
+              <a href="/#testimonials" className="hover:text-foreground transition-colors">Reviews</a>
+              <a href="/#faq" className="hover:text-foreground transition-colors">FAQ</a>
+            </nav>
+
+            {/* Actions — always far right */}
+            <div className="flex items-center gap-3 ml-auto shrink-0">
+              <button 
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} 
+                className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              >
+                {theme === 'dark' ? <Sun size={19} /> : <Moon size={19} />}
+              </button>
+
+              <Link 
+                to="/login" 
+                className="hidden sm:inline-flex px-4 py-2 rounded-lg text-sm font-semibold text-foreground hover:bg-muted transition-colors"
+              >
+                Log In
+              </Link>
+
+              <Link 
+                to="/signup" 
+                className="inline-flex items-center gap-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white px-4 sm:px-5 py-2 rounded-lg text-sm font-semibold transition-all shadow-md shadow-violet-600/25 hover:shadow-violet-600/40 hover:-translate-y-0.5"
+              >
+                <span>Get Started</span>
+              </Link>
+
+              {/* Mobile menu trigger */}
+              <button
+                onClick={() => setUnauthNavOpen(!unauthNavOpen)}
+                className="md:hidden p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                {unauthNavOpen ? <X size={20} /> : <Menu size={20} />}
+              </button>
             </div>
           </div>
+
+          {/* Mobile dropdown navigation */}
+          {unauthNavOpen && (
+            <div className="md:hidden border-b border-border bg-card/95 backdrop-blur-xl px-4 py-5 space-y-4 animate-fadeIn">
+              <nav className="flex flex-col space-y-3 text-sm font-medium">
+                <a 
+                  href="/#features" 
+                  onClick={() => setUnauthNavOpen(false)}
+                  className="px-3 py-2 rounded-lg hover:bg-muted transition-colors"
+                >
+                  Features
+                </a>
+                <a 
+                  href="/#interactive-demo" 
+                  onClick={() => setUnauthNavOpen(false)}
+                  className="px-3 py-2 rounded-lg hover:bg-muted transition-colors"
+                >
+                  Live Demo
+                </a>
+                <a 
+                  href="/#how-it-works" 
+                  onClick={() => setUnauthNavOpen(false)}
+                  className="px-3 py-2 rounded-lg hover:bg-muted transition-colors"
+                >
+                  How It Works
+                </a>
+                <Link 
+                  to="/problems" 
+                  onClick={() => setUnauthNavOpen(false)}
+                  className="px-3 py-2 rounded-lg hover:bg-muted transition-colors flex items-center justify-between"
+                >
+                  <span>Problems Arena</span>
+                  <span className="text-[10px] bg-violet-500/15 text-violet-500 px-2 py-0.5 rounded-full font-bold">500+</span>
+                </Link>
+                <a 
+                  href="/#testimonials" 
+                  onClick={() => setUnauthNavOpen(false)}
+                  className="px-3 py-2 rounded-lg hover:bg-muted transition-colors"
+                >
+                  Reviews
+                </a>
+                <a 
+                  href="/#faq" 
+                  onClick={() => setUnauthNavOpen(false)}
+                  className="px-3 py-2 rounded-lg hover:bg-muted transition-colors"
+                >
+                  FAQ
+                </a>
+              </nav>
+
+              <div className="pt-3 border-t border-border flex flex-col gap-2">
+                <Link 
+                  to="/login"
+                  onClick={() => setUnauthNavOpen(false)}
+                  className="w-full text-center py-2.5 rounded-lg text-sm font-semibold border border-border hover:bg-muted transition-colors"
+                >
+                  Log In
+                </Link>
+                <Link 
+                  to="/signup"
+                  onClick={() => setUnauthNavOpen(false)}
+                  className="w-full text-center py-2.5 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-violet-600 to-indigo-600 shadow-md shadow-violet-600/25 transition-all"
+                >
+                  Get Started Free
+                </Link>
+              </div>
+            </div>
+          )}
         </header>
         <main className="flex-1 flex flex-col">
           <Outlet />
@@ -157,10 +271,14 @@ export const MainLayout = () => {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto p-4 lg:p-8 bg-background">
-          <div className="max-w-7xl mx-auto">
+        <main className={`flex-1 ${isFullBleed ? 'flex flex-col min-h-0 overflow-hidden' : 'overflow-y-auto p-4 lg:p-8'} bg-background`}>
+          {isFullBleed ? (
             <Outlet />
-          </div>
+          ) : (
+            <div className="max-w-7xl mx-auto">
+              <Outlet />
+            </div>
+          )}
         </main>
       </div>
 

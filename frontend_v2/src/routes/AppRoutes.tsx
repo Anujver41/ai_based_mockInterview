@@ -19,32 +19,7 @@ import ResumePage from '../pages/resume/ResumePage';
 import GithubAnalyzerPage from '../pages/github/GithubAnalyzerPage';
 import DashboardPage from '../pages/dashboard/DashboardPage';
 import ConnectedPlatformsPage from '../pages/platforms/ConnectedPlatformsPage';
-
-// Temporary placeholder components for routes
-const Home = () => (
-  <div className="space-y-6 max-w-4xl mx-auto py-12">
-    <div className="text-center space-y-4">
-      <h1 className="text-5xl font-extrabold tracking-tight lg:text-6xl text-foreground">
-        Master Your Next <span className="text-primary">AI Interview</span>
-      </h1>
-      <p className="text-xl text-muted-foreground">
-        The all-in-one platform for technical interview preparation, resume optimization, and GitHub analysis.
-      </p>
-    </div>
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-12">
-      {[
-        { title: 'Mock Interviews', desc: 'Real-time AI-driven interview simulation.' },
-        { title: 'Resume Analysis', desc: 'Get instant feedback on your CV.' },
-        { title: 'GitHub Insights', desc: 'Analyze your code portfolio automatically.' }
-      ].map((feature, i) => (
-        <div key={i} className="p-6 bg-card border border-border rounded-xl shadow-sm hover:border-primary/50 transition-colors">
-          <h3 className="font-bold text-lg mb-2">{feature.title}</h3>
-          <p className="text-sm text-muted-foreground">{feature.desc}</p>
-        </div>
-      ))}
-    </div>
-  </div>
-);
+import LandingPage from '../pages/landing/LandingPage';
 
 export const AppRoutes = () => {
   const dispatch = useDispatch();
@@ -67,7 +42,7 @@ export const AppRoutes = () => {
     <Routes>
       <Route path="/" element={<MainLayout />}>
         {/* Public Routes */}
-        <Route index element={<Home />} />
+        <Route index element={<LandingPage />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="signup" element={<SignupPage />} />
         
@@ -81,8 +56,15 @@ export const AppRoutes = () => {
           } 
         />
         
-        {/* Problem Routes */}
-        <Route path="problems" element={<ProblemsListPage />} />
+        {/* Problem Routes — require login */}
+        <Route
+          path="problems"
+          element={
+            <ProtectedRoute>
+              <ProblemsListPage />
+            </ProtectedRoute>
+          }
+        />
         <Route 
           path="problems/new" 
           element={
@@ -91,7 +73,14 @@ export const AppRoutes = () => {
             </ProtectedRoute>
           } 
         />
-        <Route path="problems/:id" element={<ProblemDetailsPage />} />
+        <Route
+          path="problems/:id"
+          element={
+            <ProtectedRoute>
+              <ProblemDetailsPage />
+            </ProtectedRoute>
+          }
+        />
         
         {/* Submission Routes */}
         <Route 

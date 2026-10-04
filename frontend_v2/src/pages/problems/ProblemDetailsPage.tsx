@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getProblemById } from '../../api/problemApi';
-import { submitCode, SubmissionResponse, getUserSubmissions } from '../../api/submissionApi';
+import { submitCode, evaluateClientSide, SubmissionResponse, TestCaseResult, getUserSubmissions } from '../../api/submissionApi';
 import { useSubmissionPolling } from '../../hooks/useSubmissionPolling';
 import { useSelector } from 'react-redux';
 import type { RootState } from '../../store/store';
@@ -12,6 +12,7 @@ import {
   CheckCircle2, XCircle, Clock, Zap, History,
   ChevronDown, Terminal, FileCode
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 const LANGUAGES = [
   { id: 'javascript', label: 'JavaScript', ext: 'js', template: '// Write your solution here\n\nfunction solve(input) {\n  // Your code here\n  \n  return result;\n}\n' },
@@ -42,6 +43,47 @@ const ProblemDetailsPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lastResult, setLastResult] = useState<SubmissionResponse | null>(null);
   const [showLangDropdown, setShowLangDropdown] = useState(false);
+  const [selectedResultCase, setSelectedResultCase] = useState(0);
+  // Pending submit request stored while waiting for polling result
+  const pendingSubmitRef = React.useRef<{ code: string; language: string; isRun: boolean } | null>(null);
+
+  // Local submission history (fallback when backend not available)
+  const [localHistory, setLocalHistory] = useState<SubmissionResponse[]>(() => {
+    try {
+      const problemKey = `localHistory-${id}`;
+      const perProblem: SubmissionResponse[] = JSON.parse(localStorage.getItem(problemKey) || '[]');
+      const allGlobal: SubmissionResponse[] = JSON.parse(localStorage.getItem('all_submissions') || '[]');
+      const globalForProblem = allGlobal.filter(s =>
+        (String(s.problemId) === id || s.problemId === `p-${id}` || `p-${s.problemId}` === id) && !s.isRun
+      );
+      const combined = [...perProblem, ...globalForProblem].filter(s => !s.isRun);
+      const seen = new Set();
+      return combined.filter(s => {
+        if (seen.has(String(s.id))) return false;
+        seen.add(String(s.id));
+        return true;
+      });
+    } catch { return []; }
+  });
+
+  const saveToLocalHistory = useCallback((result: SubmissionResponse) => {
+    // Only real SUBMISSIONS (not runs) belong in history
+    if (result.isRun) return;
+
+    setLocalHistory(prev => {
+      const filtered = prev.filter(s => String(s.id) !== String(result.id) && !s.isRun);
+      const updated = [result, ...filtered].slice(0, 50);
+      try { localStorage.setItem(`localHistory-${id}`, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+
+    try {
+      const all: SubmissionResponse[] = JSON.parse(localStorage.getItem('all_submissions') || '[]');
+      const filteredAll = all.filter(s => String(s.id) !== String(result.id) && !s.isRun);
+      const updatedAll = [result, ...filteredAll].slice(0, 100);
+      localStorage.setItem('all_submissions', JSON.stringify(updatedAll));
+    } catch {}
+  }, [id]);
 
   // Save code draft to local storage when code changes
   useEffect(() => {
@@ -62,15 +104,58 @@ const ProblemDetailsPage = () => {
     enabled: !!user?.id,
   });
 
+  // Calculate merged submissions for this problem (excluding runs)
+  const problemSubmissions = React.useMemo(() => {
+    const backendSubs: SubmissionResponse[] = (submissionHistory || [])
+      .filter((s: SubmissionResponse) => (String(s.problemId) === id || s.problemId === `p-${id}` || `p-${s.problemId}` === id) && !s.isRun);
+    const allIds = new Set(backendSubs.map(s => String(s.id)));
+    const localSubs = localHistory.filter(s => !allIds.has(String(s.id)) && !s.isRun);
+    return [...backendSubs, ...localSubs]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [submissionHistory, localHistory, id]);
+
   const handlePollingComplete = useCallback((result: SubmissionResponse) => {
     setLastResult(result);
     setIsSubmitting(false);
-    setBottomTab('result');
+    setSelectedResultCase(0);
+    saveToLocalHistory(result);
     refetchHistory();
-  }, [refetchHistory]);
+
+    if (!result.isRun) {
+      toast.success(result.status === 'PASSED' ? 'Submission Accepted! Saved to History.' : 'Submission Recorded in History');
+      // If user is already on history, keep them on history so they see it appear; otherwise switch to result
+      setBottomTab(prev => (prev === 'history' ? 'history' : 'result'));
+    } else {
+      setBottomTab('result');
+    }
+  }, [refetchHistory, saveToLocalHistory]);
+
+  // Called when backend polling fails → run client-side evaluation immediately
+  const handlePollingFallback = useCallback(() => {
+    const pending = pendingSubmitRef.current;
+    if (!pending || !id) return;
+    const effectiveUserId = user?.id || 'guest_user';
+    const evalResult = evaluateClientSide(pending.code, pending.language, id);
+    const startMs = performance.now();
+    const result: SubmissionResponse = {
+      id: Date.now(),
+      userId: effectiveUserId,
+      problemId: id,
+      code: pending.code,
+      language: pending.language,
+      status: evalResult.status,
+      errorMessage: evalResult.errorMessage,
+      testResults: evalResult.testResults,
+      runtimeMs: Math.round(performance.now() - startMs),
+      isRun: pending.isRun,
+      createdAt: new Date().toISOString(),
+    };
+    handlePollingComplete(result);
+  }, [id, user?.id, handlePollingComplete]);
 
   const { submission: pollingSubmission, isPolling, error: pollingError, startPolling } = useSubmissionPolling({
     onComplete: handlePollingComplete,
+    onFallback: handlePollingFallback,
   });
 
   const handleLanguageChange = (lang: typeof LANGUAGES[number]) => {
@@ -83,33 +168,56 @@ const ProblemDetailsPage = () => {
   };
 
   const handleSubmit = async (isRun: boolean = false) => {
-    if (!user || !id) return;
+    if (!id) return;
     setIsSubmitting(true);
     setLastResult(null);
-    setBottomTab('result');
+
+    // If Run or currently on testcases, switch to result tab to see execution progress
+    if (isRun || bottomTab === 'testcases') {
+      setBottomTab('result');
+    }
+
+    const effectiveUserId = user?.id || 'guest_user';
+
+    // Store pending request for fallback evaluation if backend is unreachable
+    pendingSubmitRef.current = { code, language: language.id, isRun };
 
     try {
       const response = await submitCode({
-        userId: user.id,
+        userId: effectiveUserId,
         problemId: id,
         code,
         language: language.id,
         isRun
       });
-      startPolling(response.id);
+
+      if (response.status === 'PENDING' || response.status === 'RUNNING') {
+        startPolling(response.id);
+      } else {
+        // Instant response from backend or client fallback - brief transition for smooth UX
+        setTimeout(() => {
+          handlePollingComplete(response);
+        }, 400);
+      }
     } catch (err: any) {
       setIsSubmitting(false);
-      setLastResult({
-        id: 0,
-        userId: user.id,
+      const failResult: SubmissionResponse = {
+        id: Date.now(),
+        userId: effectiveUserId,
         problemId: id,
         code,
         language: language.id,
         status: 'FAILED',
-        errorMessage: err?.response?.data?.message || 'Submission failed. Please try again.',
+        errorMessage: err?.response?.data?.message || err?.message || 'Execution failed. Please try again.',
         isRun,
         createdAt: new Date().toISOString(),
-      });
+      };
+      setLastResult(failResult);
+      if (!isRun) {
+        saveToLocalHistory(failResult);
+        refetchHistory();
+        toast.error('Submission failed. Recorded in history.');
+      }
     }
   };
 
@@ -158,7 +266,7 @@ const ProblemDetailsPage = () => {
   // --- Loading state ---
   if (isLoading || !problem) {
     return (
-      <div className="flex flex-col h-[calc(100vh-6rem)] -mx-4 md:-mx-8">
+      <div className="flex flex-col h-[calc(100vh-4rem)] w-full overflow-hidden">
         {/* Skeleton header */}
         <div className="flex items-center justify-between px-6 py-3 border-b border-border bg-card">
           <div className="flex items-center gap-4">
@@ -194,7 +302,7 @@ const ProblemDetailsPage = () => {
   const isProcessing = isSubmitting || isPolling;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-6rem)] -mx-4 md:-mx-8">
+    <div className="flex flex-col h-[calc(100vh-4rem)] w-full overflow-hidden">
       {/* ====== TOP BAR ====== */}
       <div className="flex items-center justify-between px-4 md:px-6 py-2.5 border-b border-border bg-card shrink-0">
         <div className="flex items-center gap-3">
@@ -245,15 +353,15 @@ const ProblemDetailsPage = () => {
           <button
             disabled={isProcessing}
             onClick={() => handleSubmit(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 transition-colors disabled:opacity-50 font-medium"
           >
-            <Play className="w-3.5 h-3.5" />
+            {isProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
             <span className="hidden sm:inline">Run</span>
           </button>
 
           {/* Submit Button */}
           <button
-            disabled={isProcessing || !user}
+            disabled={isProcessing}
             onClick={() => handleSubmit(false)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 transition-all disabled:opacity-50 font-medium shadow-sm shadow-green-600/20"
           >
@@ -386,8 +494,16 @@ const ProblemDetailsPage = () => {
             <div className="flex items-center border-b border-[#2d2d2d] bg-[#252526] px-2 shrink-0">
               {([
                 { key: 'testcases' as BottomTab, label: 'Test Cases', icon: <Terminal className="w-3.5 h-3.5" /> },
-                { key: 'result' as BottomTab, label: 'Result', icon: activeSubmission ? getStatusIcon(activeSubmission.status) : <Zap className="w-3.5 h-3.5" /> },
-                { key: 'history' as BottomTab, label: 'History', icon: <History className="w-3.5 h-3.5" /> },
+                {
+                  key: 'result' as BottomTab,
+                  label: activeSubmission?.isRun === false ? 'Submission Result' : 'Result',
+                  icon: activeSubmission ? getStatusIcon(activeSubmission.status) : <Zap className="w-3.5 h-3.5" />
+                },
+                {
+                  key: 'history' as BottomTab,
+                  label: `History${problemSubmissions.length > 0 ? ` (${problemSubmissions.length})` : ''}`,
+                  icon: <History className="w-3.5 h-3.5" />
+                },
               ]).map(tab => (
                 <button
                   key={tab.key}
@@ -395,7 +511,7 @@ const ProblemDetailsPage = () => {
                   className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors border-b-2
                     ${bottomTab === tab.key
                       ? 'border-primary text-primary'
-                      : 'border-transparent text-gray-500 hover:text-gray-300'}`}
+                      : 'border-transparent text-gray-400 hover:text-gray-200'}`}
                 >
                   {tab.icon}
                   {tab.label}
@@ -439,7 +555,7 @@ const ProblemDetailsPage = () => {
                   {!activeSubmission && !isProcessing && (
                     <div className="flex flex-col items-center justify-center py-8 text-gray-500">
                       <Send className="w-8 h-8 mb-2 opacity-30" />
-                      <p>Submit your code to see results</p>
+                      <p>Run or submit your code to see results</p>
                     </div>
                   )}
 
@@ -449,118 +565,236 @@ const ProblemDetailsPage = () => {
                         <div className="w-12 h-12 border-4 border-primary/20 rounded-full" />
                         <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin absolute inset-0" />
                       </div>
-                      <p className="text-gray-400 text-sm">Submitting your solution...</p>
+                      <p className="text-gray-400 text-sm">Running your solution...</p>
                     </div>
                   )}
 
-                  {activeSubmission && (
-                    <div className="space-y-4">
-                      {/* Status Banner */}
-                      <div className={`p-4 rounded-lg border flex items-center gap-3
-                        ${activeSubmission.status === 'PASSED'
-                          ? 'bg-green-500/5 border-green-500/20'
-                          : activeSubmission.status === 'FAILED'
-                          ? 'bg-red-500/5 border-red-500/20'
-                          : 'bg-yellow-500/5 border-yellow-500/20'}`}
-                      >
-                        {activeSubmission.status === 'PASSED' && <CheckCircle2 className="w-8 h-8 text-green-500" />}
-                        {activeSubmission.status === 'FAILED' && <XCircle className="w-8 h-8 text-red-500" />}
-                        {(activeSubmission.status === 'PENDING' || activeSubmission.status === 'RUNNING') && (
-                          <Loader2 className="w-8 h-8 text-yellow-500 animate-spin" />
+                  {activeSubmission && (() => {
+                    const cases: TestCaseResult[] = activeSubmission.testResults || [];
+                    const allPassed = activeSubmission.status === 'PASSED';
+                    const curCase = cases[selectedResultCase] || null;
+                    const passedCount = cases.filter(c => c.passed).length;
+                    const totalCount = cases.length;
+                    const passPercent = totalCount > 0 ? Math.round((passedCount / totalCount) * 100) : 0;
+                    return (
+                      <div className="space-y-3">
+                        {/* ── Submission Recorded Banner (Only for real Submit, not Run) ── */}
+                        {!activeSubmission.isRun && (
+                          <div className="flex items-center justify-between px-3 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-xs text-emerald-400">
+                            <span className="flex items-center gap-1.5 font-medium">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                              Submission saved to your History ({problemSubmissions.length})
+                            </span>
+                            <button
+                              onClick={() => setBottomTab('history')}
+                              className="font-semibold text-emerald-300 hover:text-emerald-200 underline cursor-pointer"
+                            >
+                              View in History Tab →
+                            </button>
+                          </div>
                         )}
-                        <div>
-                          <p className={`font-bold text-lg
-                            ${activeSubmission.status === 'PASSED' ? 'text-green-400' :
-                              activeSubmission.status === 'FAILED' ? 'text-red-400' : 'text-yellow-400'}`}>
-                            {activeSubmission.status === 'PASSED' ? '✅ Accepted' :
-                             activeSubmission.status === 'FAILED'
-                               ? (activeSubmission.errorMessage?.includes('Compilation Error') ? '⚠️ Compilation Error' :
-                                  activeSubmission.errorMessage?.includes('Runtime Error') ? '💥 Runtime Error' :
-                                  activeSubmission.errorMessage?.includes('Time Limit Exceeded') ? '⏱️ Time Limit Exceeded' :
-                                  '❌ Wrong Answer')
-                               : activeSubmission.status === 'RUNNING' ? '⚡ Running...' : '⏳ Pending...'}
-                          </p>
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            {activeSubmission.language} • Submission #{activeSubmission.id}
-                          </p>
+
+                        {/* ── Status Header ── */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            {allPassed
+                              ? <CheckCircle2 className="w-6 h-6 text-green-500" />
+                              : <XCircle className="w-6 h-6 text-red-500" />}
+                            <span className={`text-xl font-bold ${
+                              allPassed ? 'text-green-400' : 'text-red-400'
+                            }`}>
+                              {allPassed ? 'Accepted' : (
+                                activeSubmission.errorMessage?.includes('Runtime Error') ? 'Runtime Error' :
+                                activeSubmission.errorMessage?.includes('Incomplete') ? 'Incomplete Solution' :
+                                'Wrong Answer'
+                              )}
+                            </span>
+                          </div>
+                          <span className="text-xs text-gray-500">
+                            Runtime: {activeSubmission.runtimeMs ?? 0} ms
+                          </span>
                         </div>
+
+                        {/* ── Passed / Total Counter ── */}
+                        {totalCount > 0 && (
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-gray-400">
+                                <span className={`font-semibold ${allPassed ? 'text-green-400' : passedCount > 0 ? 'text-yellow-400' : 'text-red-400'}`}>
+                                  {passedCount}
+                                </span>
+                                <span className="text-gray-500"> / {totalCount} test cases passed</span>
+                              </span>
+                              <span className={`font-medium ${allPassed ? 'text-green-400' : passedCount > 0 ? 'text-yellow-400' : 'text-red-400'}`}>
+                                {passPercent}%
+                              </span>
+                            </div>
+                            {/* Progress Bar */}
+                            <div className="h-1.5 w-full bg-[#2d2d30] rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ${
+                                  allPassed ? 'bg-green-500' : passedCount > 0 ? 'bg-yellow-500' : 'bg-red-500'
+                                }`}
+                                style={{ width: `${passPercent}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ── Incomplete / no test data message ── */}
+                        {activeSubmission.errorMessage?.includes('Incomplete') && (
+                          <div className="bg-yellow-500/10 border border-yellow-500/25 rounded-lg p-3 text-xs text-yellow-300 whitespace-pre-wrap font-mono">
+                            {activeSubmission.errorMessage}
+                          </div>
+                        )}
+
+                        {/* ── Case Tabs ── */}
+                        {cases.length > 0 && (
+                          <>
+                            <div className="flex gap-2 flex-wrap">
+                              {cases.map((c, idx) => (
+                                <button
+                                  key={idx}
+                                  onClick={() => setSelectedResultCase(idx)}
+                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors border ${
+                                    selectedResultCase === idx
+                                      ? c.passed
+                                        ? 'bg-green-500/15 border-green-500/40 text-green-400'
+                                        : 'bg-red-500/15 border-red-500/40 text-red-400'
+                                      : 'bg-[#252526] border-transparent text-gray-400 hover:text-gray-200'
+                                  }`}
+                                >
+                                  {c.passed
+                                    ? <CheckCircle2 className="w-3 h-3" />
+                                    : <XCircle className="w-3 h-3" />}
+                                  Case {idx + 1}
+                                </button>
+                              ))}
+                            </div>
+
+                            {/* ── Input / Output / Expected ── */}
+                            {curCase && (
+                              <div className="space-y-3">
+                                {/* Input */}
+                                <div>
+                                  <p className="text-xs text-gray-400 font-medium mb-1">Input</p>
+                                  <pre className="bg-[#1e1e1e] border border-[#3e3e42] rounded-lg p-3 text-sm text-gray-200 font-mono whitespace-pre-wrap overflow-x-auto">
+                                    {curCase.input}
+                                  </pre>
+                                </div>
+
+                                {/* Output */}
+                                <div>
+                                  <p className="text-xs text-gray-400 font-medium mb-1">Output</p>
+                                  <pre className={`rounded-lg p-3 text-sm font-mono whitespace-pre-wrap overflow-x-auto border ${
+                                    curCase.passed
+                                      ? 'bg-green-500/5 border-green-500/20 text-green-300'
+                                      : 'bg-red-500/5 border-red-500/20 text-red-300'
+                                  }`}>
+                                    {curCase.actualOutput}
+                                  </pre>
+                                </div>
+
+                                {/* Expected */}
+                                <div>
+                                  <p className="text-xs text-gray-400 font-medium mb-1">Expected</p>
+                                  <pre className="bg-[#1e1e1e] border border-[#3e3e42] rounded-lg p-3 text-sm text-gray-200 font-mono whitespace-pre-wrap overflow-x-auto">
+                                    {curCase.expectedOutput}
+                                  </pre>
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )}
+
+                        {/* Polling indicator */}
+                        {isPolling && (
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <div className="flex gap-0.5">
+                              <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                              <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                              <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                            </div>
+                            Checking status...
+                          </div>
+                        )}
+
+                        {pollingError && (
+                          <div className="bg-yellow-500/5 border border-yellow-500/20 rounded p-3 text-xs text-yellow-400">
+                            {pollingError}
+                          </div>
+                        )}
                       </div>
-
-                      {/* Error Message */}
-                      {activeSubmission.errorMessage && (
-                        <div className="bg-red-500/5 border border-red-500/20 rounded-lg overflow-hidden">
-                          <div className="px-3 py-2 bg-red-500/10 border-b border-red-500/20">
-                            <p className="text-xs text-red-400 font-semibold">
-                              {activeSubmission.errorMessage.includes('Compilation Error') ? '🔧 Compilation Error' :
-                               activeSubmission.errorMessage.includes('Runtime Error') ? '💥 Runtime Error' :
-                               activeSubmission.errorMessage.includes('Time Limit Exceeded') ? '⏱️ Time Limit Exceeded' :
-                               '📋 Test Case Details'}
-                            </p>
-                          </div>
-                          <pre className="text-xs text-red-300 font-mono whitespace-pre-wrap p-3 bg-[#1a0000] leading-relaxed overflow-x-auto max-h-64 overflow-y-auto">
-{activeSubmission.errorMessage}
-                          </pre>
-                        </div>
-                      )}
-
-                      {/* Polling status indicator */}
-                      {isPolling && (
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <div className="flex gap-0.5">
-                            <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                            <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                            <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                          </div>
-                          Checking status...
-                        </div>
-                      )}
-
-                      {pollingError && (
-                        <div className="bg-yellow-500/5 border border-yellow-500/20 rounded p-3 text-xs text-yellow-400">
-                          {pollingError}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               )}
 
               {/* --- History Tab --- */}
               {bottomTab === 'history' && (
                 <div className="space-y-2">
-                  {!submissionHistory || submissionHistory.length === 0 ? (
+                  {problemSubmissions.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-8 text-gray-500">
                       <History className="w-8 h-8 mb-2 opacity-30" />
-                      <p>No submissions yet</p>
+                      <p className="text-sm font-medium text-gray-300">No submissions yet</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Click the green <span className="text-green-400 font-semibold">Submit</span> button (not Run) to submit your solution.
+                      </p>
                     </div>
                   ) : (
-                    <div className="space-y-1">
-                      {submissionHistory
-                        .filter(s => String(s.problemId) === id)
-                        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                        .map((sub) => (
+                    problemSubmissions.map((sub) => (
+                      <div
+                        key={sub.id}
+                        className="w-full flex items-center justify-between p-3 rounded-lg bg-[#252526] hover:bg-[#2d2d2e] border border-[#3e3e42] transition-colors"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          {getStatusIcon(sub.status)}
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={getStatusBadge(sub.status)}>
+                                {sub.status === 'PASSED' ? 'Accepted' : 'Wrong Answer'}
+                              </span>
+                              <span className="text-xs text-gray-400 font-mono bg-[#1e1e1e] px-2 py-0.5 rounded border border-[#333]">
+                                {sub.language}
+                              </span>
+                              {sub.testResults && sub.testResults.length > 0 && (
+                                <span className={`text-xs font-medium ${sub.status === 'PASSED' ? 'text-green-400' : 'text-yellow-400'}`}>
+                                  {sub.testResults.filter(r => r.passed).length}/{sub.testResults.length} cases
+                                </span>
+                              )}
+                              {sub.runtimeMs !== undefined && (
+                                <span className="text-xs text-gray-500">
+                                  {sub.runtimeMs} ms
+                                </span>
+                              )}
+                            </div>
+                            {sub.errorMessage && sub.status !== 'PASSED' && (
+                              <p className="text-xs text-red-400 mt-1 truncate max-w-sm">
+                                {sub.errorMessage}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="text-xs text-gray-500">
+                            {formatTime(sub.createdAt)}
+                          </span>
                           <button
-                            key={sub.id}
                             onClick={() => {
                               setLastResult(sub);
                               setCode(sub.code);
+                              setSelectedResultCase(0);
                               setBottomTab('result');
                             }}
-                            className="w-full flex items-center gap-3 p-2.5 rounded-md hover:bg-[#252526] transition-colors text-left group"
+                            className="px-2.5 py-1 text-xs bg-primary/10 text-primary hover:bg-primary/20 rounded border border-primary/20 transition-colors cursor-pointer font-medium"
+                            title="Load code & view details"
                           >
-                            {getStatusIcon(sub.status)}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className={getStatusBadge(sub.status)}>{sub.status}</span>
-                                <span className="text-xs text-gray-500">{sub.language}</span>
-                              </div>
-                            </div>
-                            <span className="text-xs text-gray-600 shrink-0">
-                              {formatTime(sub.createdAt)}
-                            </span>
+                            View Details
                           </button>
-                        ))}
-                    </div>
+                        </div>
+                      </div>
+                    ))
                   )}
                 </div>
               )}

@@ -323,18 +323,60 @@ export const fetchHackerRankStats = async (rawUsername: string): Promise<Partial
   const username = cleanUsername(rawUsername, 'hackerrank');
   if (!username) throw new Error('Invalid HackerRank username or profile URL');
 
-  const res = await axios.get(
-    `/api-proxy/hackerrank/rest/hackers/${username}/scores_elo`,
-    { timeout: 15000 }
-  );
+  let totalSolved = 0;
+  let rank: string | number | undefined;
 
-  const models: any[] = res.data?.models ?? [];
-  const totalScore = models.reduce((sum: number, m: any) => sum + (m.score ?? 0), 0);
+  // 1. Fetch Badges (contains solved challenge counts per badge/domain)
+  try {
+    const badgesRes = await axios.get(
+      `/api-proxy/hackerrank/rest/hackers/${username}/badges`,
+      { timeout: 15000 }
+    );
+    const badgeModels: any[] = badgesRes.data?.models ?? [];
+    if (badgeModels.length > 0) {
+      totalSolved = badgeModels.reduce((sum: number, b: any) => sum + (b.solved ?? 0), 0);
+      const topRankHacker = badgeModels.find((b: any) => b.hacker_rank);
+      if (topRankHacker) {
+        rank = topRankHacker.hacker_rank;
+      }
+    }
+  } catch (e) {
+    console.warn('HackerRank badges fetch error:', e);
+  }
+
+  // 2. Fetch scores_elo (contains practice scores and track ranks)
+  try {
+    const eloRes = await axios.get(
+      `/api-proxy/hackerrank/rest/hackers/${username}/scores_elo`,
+      { timeout: 15000 }
+    );
+    const tracks: any[] = Array.isArray(eloRes.data) ? eloRes.data : (eloRes.data?.models ?? []);
+    
+    // Find best rank across practice tracks if rank not found yet
+    if (!rank) {
+      for (const track of tracks) {
+        const r = track.practice?.rank;
+        if (r && typeof r === 'number' && r > 0) {
+          if (!rank || r < (rank as number)) {
+            rank = r;
+          }
+        }
+      }
+    }
+
+    // If badges API returned 0 solved, fallback to practice score sum
+    if (totalSolved === 0 && tracks.length > 0) {
+      const totalScore = tracks.reduce((sum: number, m: any) => sum + (m.practice?.score ?? m.score ?? 0), 0);
+      totalSolved = Math.round(totalScore);
+    }
+  } catch (e) {
+    console.warn('HackerRank scores_elo fetch error:', e);
+  }
 
   return {
-    totalSolved: Math.round(totalScore),
-    rank: models[0]?.rank,
-    profileUrl: `https://www.hackerrank.com/${username}`,
+    totalSolved,
+    rank: rank ? `#${Number(rank).toLocaleString()}` : undefined,
+    profileUrl: `https://www.hackerrank.com/profile/${username}`,
   };
 };
 
@@ -497,15 +539,25 @@ export const fetchGFGDailyData = async (rawUsername: string): Promise<Record<str
   return getRecordedPlatformDailyMap('gfg');
 };
 
-/** HackerRank: returns recorded daily map from live snapshot tracker */
+/** HackerRank: returns real submission history combined with local snapshot tracker */
 export const fetchHackerRankDailyData = async (rawUsername: string): Promise<Record<string, number>> => {
-  try {
-    const stats = await fetchHackerRankStats(rawUsername);
-    if (stats.totalSolved) {
-      recordPlatformTotal('hackerrank', stats.totalSolved);
+  const username = cleanUsername(rawUsername, 'hackerrank');
+  let realMap: Record<string, number> = {};
+  if (username) {
+    try {
+      const res = await axios.get(
+        `/api-proxy/hackerrank/rest/hackers/${username}/submission_histories`,
+        { timeout: 15000 }
+      );
+      if (res.data && typeof res.data === 'object' && !Array.isArray(res.data)) {
+        realMap = res.data;
+      }
+    } catch (e) {
+      console.warn('HackerRank submission_histories fetch error:', e);
     }
-  } catch {}
-  return getRecordedPlatformDailyMap('hackerrank');
+  }
+  const recordedMap = getRecordedPlatformDailyMap('hackerrank');
+  return { ...recordedMap, ...realMap };
 };
 
 /** Unified daily data fetcher */
