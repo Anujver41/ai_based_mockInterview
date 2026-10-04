@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Editor from '@monaco-editor/react';
 import {
   getSessionMessages, sendChatMessage, endInterview,
-  InterviewMessageResponse, getUserSessions
+  InterviewMessageResponse, InterviewSessionResponse, getUserSessions, getProblemsForTopic
 } from '../../api/interviewApi';
 import {
   Brain, Send, ChevronLeft, Square, Clock,
@@ -221,6 +221,7 @@ const InterviewChatPage = () => {
 
   const currentSession = sessions?.find(s => s.id === sessionId);
   const topic = currentSession?.topic || 'Arrays & Hashing';
+  const problems = getProblemsForTopic(topic);
 
   // Fetch messages
   const { data: messages, isLoading, error } = useQuery({
@@ -230,16 +231,42 @@ const InterviewChatPage = () => {
     refetchInterval: false,
   });
 
-  const aiMessages = messages?.filter(m => m.role === 'AI').length || 0;
-  const currentQuestion = aiMessages >= 3 ? 2 : 1;
+  // Explicit, candidate-controlled question navigation (Question 1 vs Question 2)
+  const [currentQuestion, setCurrentQuestion] = useState<1 | 2>(1);
 
-  // Set default code template when topic, language or question changes
+  // Track solved status per question
+  const [solvedQuestions, setSolvedQuestions] = useState<{ q1: boolean; q2: boolean }>(() => {
+    try {
+      const raw = localStorage.getItem(`interview_solved_${sessionId}`);
+      return raw ? JSON.parse(raw) : { q1: false, q2: false };
+    } catch {
+      return { q1: false, q2: false };
+    }
+  });
+
+  const solvedCount = (solvedQuestions.q1 ? 1 : 0) + (solvedQuestions.q2 ? 1 : 0);
+
+  // Set default code template when topic, language or question changes (with draft persistence)
   useEffect(() => {
-    const templates = currentQuestion === 2 
-      ? (BOILERPLATES_Q2[topic] || BOILERPLATES_Q2['Arrays & Hashing'])
-      : (BOILERPLATES[topic] || BOILERPLATES['Arrays & Hashing']);
-    setCode(templates[selectedLang] || '');
-  }, [topic, selectedLang, currentQuestion]);
+    const draftKey = `interview_draft_${sessionId}_q${currentQuestion}_${selectedLang}`;
+    const savedDraft = localStorage.getItem(draftKey);
+    if (savedDraft) {
+      setCode(savedDraft);
+    } else {
+      const templates = currentQuestion === 2 
+        ? (BOILERPLATES_Q2[topic] || BOILERPLATES_Q2['Arrays & Hashing'])
+        : (BOILERPLATES[topic] || BOILERPLATES['Arrays & Hashing']);
+      setCode(templates[selectedLang] || '');
+    }
+  }, [topic, selectedLang, currentQuestion, sessionId]);
+
+  const handleCodeChange = (newVal: string | undefined) => {
+    const text = newVal || '';
+    setCode(text);
+    if (sessionId) {
+      localStorage.setItem(`interview_draft_${sessionId}_q${currentQuestion}_${selectedLang}`, text);
+    }
+  };
 
   // Send message mutation
   const chatMutation = useMutation({
@@ -252,26 +279,18 @@ const InterviewChatPage = () => {
     },
   });
 
-  // End session mutation
+  // End session mutation with solved count and score
   const endMutation = useMutation({
-    mutationFn: () => endInterview(sessionId!),
+    mutationFn: () => endInterview(
+      sessionId!,
+      solvedCount,
+      solvedCount === 2 ? '9.5/10' : solvedCount === 1 ? '7.0/10' : '4.0/10'
+    ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['interview-sessions'] });
       navigate('/interview');
     },
   });
-
-  // Automatically submit/end the interview when 2nd question's feedback is given
-  useEffect(() => {
-    if (aiMessages >= 5 && currentSession?.status !== 'COMPLETED') {
-      const timer = setTimeout(() => {
-        if (!endMutation.isPending) {
-          endMutation.mutate();
-        }
-      }, 5000); // 5 seconds for the user to read the final score before redirect
-      return () => clearTimeout(timer);
-    }
-  }, [aiMessages, currentSession?.status, endMutation]);
 
   // Auto-scroll to bottom
   const scrollToBottom = useCallback(() => {
@@ -434,9 +453,35 @@ const InterviewChatPage = () => {
           { type: 'info', text: 'Memory: 14.3 MB (Beats 88.5% of submissions)' }
         ]);
 
-        // Integrate with the AI Interview chat optimistically!
-        // Automatically send the submitted code into the chat context so Gemini reads it and follow-up
-        const submissionContext = `[Code Submission - ${selectedLang.toUpperCase()}]\n\`\`\`${selectedLang}\n${code}\n\`\`\`\nSubmission Result: PASSED! I have successfully completed this question. What are your thoughts on my implementation?`;
+        // Mark current question as solved
+        const qNum = currentQuestion;
+        const updatedSolved = {
+          ...solvedQuestions,
+          [qNum === 1 ? 'q1' : 'q2']: true,
+        };
+        setSolvedQuestions(updatedSolved);
+        try {
+          localStorage.setItem(`interview_solved_${sessionId}`, JSON.stringify(updatedSolved));
+        } catch {}
+
+        const currentSolvedCount = (updatedSolved.q1 ? 1 : 0) + (updatedSolved.q2 ? 1 : 0);
+
+        // Update session in localStorage immediately with solvedCount and score
+        try {
+          const allSessions: InterviewSessionResponse[] = JSON.parse(localStorage.getItem('interview_sessions') || '[]');
+          const updated = allSessions.map(s => s.id === sessionId ? {
+            ...s,
+            solvedCount: currentSolvedCount,
+            totalQuestions: 2,
+            score: currentSolvedCount === 2 ? '9.5/10' : '7.0/10'
+          } : s);
+          localStorage.setItem('interview_sessions', JSON.stringify(updated));
+          queryClient.invalidateQueries({ queryKey: ['interview-sessions'] });
+        } catch {}
+
+        // Integrate with the AI Interview chat with specific question context
+        const problemTitle = qNum === 1 ? problems.q1.title : problems.q2.title;
+        const submissionContext = `[Code Submission - Q${qNum} - ${selectedLang.toUpperCase()}]\n\`\`\`${selectedLang}\n${code}\n\`\`\`\nSubmission Result: PASSED! Question ${qNum} (${problemTitle}) has passed all 15 test cases successfully. Total solved: ${currentSolvedCount}/2.`;
         
         const userMsg: InterviewMessageResponse = {
           id: `temp-sub-${Date.now()}`,
@@ -487,10 +532,20 @@ const InterviewChatPage = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-4 text-xs text-muted-foreground font-mono bg-muted/30 px-3 py-1 rounded-md border border-border/50">
-            <div className="flex items-center gap-1">
+          <div className="flex items-center gap-3 text-xs font-mono bg-muted/30 px-3 py-1 rounded-md border border-border/50">
+            <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${
+              solvedCount === 2
+                ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
+                : solvedCount === 1
+                ? 'text-amber-400 bg-amber-500/10 border-amber-500/30'
+                : 'text-gray-400 bg-gray-500/10 border-gray-500/20'
+            }`}>
+              {solvedCount}/2 Solved
+            </span>
+            <div className="w-px h-3 bg-border" />
+            <div className="flex items-center gap-1.5">
               <MessageSquare className="w-3.5 h-3.5 text-violet-400" />
-              <span>{aiMessages} Qs</span>
+              <span className="text-violet-300 font-medium">Q{currentQuestion} of 2</span>
             </div>
             <div className="w-px h-3 bg-border" />
             <div className="flex items-center gap-1">
@@ -498,6 +553,18 @@ const InterviewChatPage = () => {
               <span>{timer}</span>
             </div>
           </div>
+
+          {solvedCount === 2 && (
+            <button
+              onClick={() => endMutation.mutate()}
+              disabled={endMutation.isPending}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-all font-medium shadow-md shadow-emerald-600/20 shrink-0"
+              title="Save 2/2 completed interview to history"
+            >
+              {endMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+              <span>Complete (2/2)</span>
+            </button>
+          )}
 
           <button
             onClick={() => endMutation.mutate()}
@@ -601,9 +668,39 @@ const InterviewChatPage = () => {
           
           {/* Code Header Bar */}
           <div className="flex items-center justify-between px-4 py-2 border-b border-[#2d2d2d] bg-[#252526] text-xs text-gray-300 shrink-0 select-none">
-            <div className="flex items-center gap-2 font-semibold">
-              <FileCode className="w-4 h-4 text-emerald-400" />
-              <span>Solution Code</span>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 font-semibold">
+                <FileCode className="w-4 h-4 text-emerald-400" />
+                <span>Solution Code</span>
+              </div>
+
+              {/* Question 1 / Question 2 Selector Tabs */}
+              <div className="flex items-center gap-1 bg-[#1a1a1a] p-0.5 rounded-lg border border-[#3e3e3e]">
+                <button
+                  onClick={() => setCurrentQuestion(1)}
+                  className={`px-2.5 py-1 text-[11px] font-medium rounded transition-all flex items-center gap-1.5 ${
+                    currentQuestion === 1
+                      ? 'bg-violet-600 text-white shadow-sm font-semibold'
+                      : 'text-gray-400 hover:text-gray-200'
+                  }`}
+                  title={problems.q1.title}
+                >
+                  {solvedQuestions.q1 && <Check className="w-3 h-3 text-emerald-400" />}
+                  <span>Q1: {problems.q1.title}</span>
+                </button>
+                <button
+                  onClick={() => setCurrentQuestion(2)}
+                  className={`px-2.5 py-1 text-[11px] font-medium rounded transition-all flex items-center gap-1.5 ${
+                    currentQuestion === 2
+                      ? 'bg-violet-600 text-white shadow-sm font-semibold'
+                      : 'text-gray-400 hover:text-gray-200'
+                  }`}
+                  title={problems.q2.title}
+                >
+                  {solvedQuestions.q2 && <Check className="w-3 h-3 text-emerald-400" />}
+                  <span>Q2: {problems.q2.title}</span>
+                </button>
+              </div>
             </div>
 
             <div className="flex items-center gap-2">
@@ -659,7 +756,7 @@ const InterviewChatPage = () => {
               language={selectedLang}
               theme="vs-dark"
               value={code}
-              onChange={(value) => setCode(value || '')}
+              onChange={handleCodeChange}
               options={{
                 minimap: { enabled: false },
                 fontSize: 14,

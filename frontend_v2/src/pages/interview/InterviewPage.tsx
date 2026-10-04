@@ -197,7 +197,23 @@ const InterviewPage = () => {
                   <MessageSquare className="w-5 h-5 text-green-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm">{session.topic}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-semibold text-sm">{session.topic}</p>
+                    <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border ${
+                      (session.solvedCount ?? 0) === 2
+                        ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
+                        : (session.solvedCount ?? 0) === 1
+                        ? 'text-amber-400 bg-amber-500/10 border-amber-500/30'
+                        : 'text-gray-400 bg-gray-500/10 border-gray-500/20'
+                    }`}>
+                      {session.solvedCount ?? 0}/2 Solved
+                    </span>
+                    {session.score && (
+                      <span className="text-[10px] font-semibold text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded border border-violet-500/20">
+                        {session.score}
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className={getStatusBadge(session.status)}>{session.status}</span>
                     <span className="text-xs text-muted-foreground">{session.difficulty}</span>
@@ -247,7 +263,23 @@ const InterviewPage = () => {
                 >
                   {getStatusIcon(session.status)}
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm">{session.topic}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-medium text-sm">{session.topic}</p>
+                      <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border ${
+                        (session.solvedCount ?? 0) === 2
+                          ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
+                          : (session.solvedCount ?? 0) === 1
+                          ? 'text-amber-400 bg-amber-500/10 border-amber-500/30'
+                          : 'text-gray-400 bg-gray-500/10 border-gray-500/20'
+                      }`}>
+                        {session.solvedCount ?? 0}/2 Solved
+                      </span>
+                      {session.score && (
+                        <span className="text-[10px] font-semibold text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded border border-violet-500/20">
+                          {session.score}
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className={getStatusBadge(session.status)}>{session.status}</span>
                       <span className="text-xs text-muted-foreground">{session.difficulty}</span>
