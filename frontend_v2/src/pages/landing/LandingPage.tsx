@@ -93,15 +93,7 @@ export const LandingPage = () => {
               <CheckCircle2 className="w-4 h-4 text-emerald-500" />
               <span>Realistic FAANG-style personas</span>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="flex text-amber-400">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} className="w-3.5 h-3.5 fill-current" />
-                ))}
-              </div>
-              <span className="font-semibold text-foreground">4.9/5</span>
-              <span>by 15k+ engineers</span>
-            </div>
+
           </div>
         </section>
 
