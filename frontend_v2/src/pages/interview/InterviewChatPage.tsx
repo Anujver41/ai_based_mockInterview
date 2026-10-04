@@ -221,7 +221,8 @@ const InterviewChatPage = () => {
 
   const currentSession = sessions?.find(s => s.id === sessionId);
   const topic = currentSession?.topic || 'Arrays & Hashing';
-  const problems = getProblemsForTopic(topic);
+  const difficulty = currentSession?.difficulty || 'EASY';
+  const problems = getProblemsForTopic(topic, difficulty);
 
   // Fetch messages
   const { data: messages, isLoading, error } = useQuery({
